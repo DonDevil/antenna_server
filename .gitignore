@@ -1,0 +1,59 @@
+# Python cache and build artifacts
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Tooling caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# Editors and OS files
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Local environment files
+.env
+.env.*
+
+# Runtime and research artifacts
+logs/
+sessions/
+runs/
+artifacts/
+tmp/
+temp/
+*.tmp
+*.log
+
+# Model and data artifacts generated during experiments
+models/**/*.pt
+models/**/*.pth
+models/**/*.onnx
+models/**/*.keras
+models/**/*.save
+models/**/metadata.local.json
+
+# Local CST and export artifacts
+exports/
+*.cst
+*.bak
+*.cache
