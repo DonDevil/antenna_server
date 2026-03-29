@@ -48,6 +48,7 @@ class OptimizationPolicy(BaseModel):
     max_iterations: int = Field(default=5, ge=1, le=20)
     stop_on_first_valid: bool = True
     acceptance: AcceptanceSpec = Field(default_factory=AcceptanceSpec)
+    fallback_behavior: Literal["best_effort", "return_error", "require_user_confirmation"] = "best_effort"
 
 
 class RuntimePreferences(BaseModel):
@@ -104,4 +105,5 @@ class OptimizeResponse(BaseModel):
     ann_prediction: AnnPrediction | None = None
     command_package: dict | None = None
     clarification: dict | None = None
+    warnings: list[str] = Field(default_factory=list)
     error: dict | None = None

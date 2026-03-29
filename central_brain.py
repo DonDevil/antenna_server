@@ -2,13 +2,14 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, cast
 
 from app.ann.predictor import AnnPredictor
 from app.commands.planner import build_command_package
 from app.core.refinement import evaluate_acceptance, refine_prediction
 from app.core.schemas import AnnPrediction, OptimizeRequest, OptimizeResponse
 from app.core.session_store import SessionStore
+from app.core.surrogate_validator import validate_with_surrogate
 
 
 class CentralBrain:
@@ -18,11 +19,98 @@ class CentralBrain:
         self.ann_predictor = AnnPredictor()
         self.session_store = SessionStore()
 
+    @staticmethod
+    def _surrogate_warnings(surrogate: dict[str, Any]) -> list[str]:
+        confidence = float(surrogate.get("confidence", 0.0))
+        threshold = float(surrogate.get("threshold", 0.0))
+        residual = surrogate.get("residual", {})
+        freq_error = float(residual.get("center_frequency_abs_error_ghz", 0.0))
+        bw_error = float(residual.get("bandwidth_abs_error_mhz", 0.0))
+        decision_reason = str(surrogate.get("decision_reason", "unknown"))
+
+        return [
+            f"surrogate_confidence={confidence:.3f} (threshold={threshold:.3f})",
+            (
+                "surrogate_residuals: "
+                f"center_frequency_abs_error_ghz={freq_error:.4f}, "
+                f"bandwidth_abs_error_mhz={bw_error:.2f}"
+            ),
+            f"surrogate_decision={decision_reason}",
+        ]
+
     def optimize(self, request: OptimizeRequest) -> OptimizeResponse:
         session_id = request.session_id or str(uuid.uuid4())
         trace_id = str(uuid.uuid4())
 
         ann = self.ann_predictor.predict(request.target_spec)
+        surrogate = validate_with_surrogate(request, ann)
+
+        if not bool(surrogate["accepted"]):
+            fallback_behavior = request.optimization_policy.fallback_behavior
+
+            if fallback_behavior == "require_user_confirmation":
+                decision_reason = "surrogate_confidence_below_threshold"
+                stop_reason = "requires_user_confirmation"
+                self.session_store.create(
+                    session_id=session_id,
+                    trace_id=trace_id,
+                    request_payload=request.model_dump(mode="json"),
+                    ann_payload=ann.model_dump(mode="json"),
+                    surrogate_validation=surrogate,
+                    command_package=None,
+                    max_iterations=request.optimization_policy.max_iterations,
+                    initial_status="clarification_required",
+                    stop_reason=stop_reason,
+                    decision_reason=decision_reason,
+                )
+                return OptimizeResponse(
+                    status="clarification_required",
+                    session_id=session_id,
+                    trace_id=trace_id,
+                    current_stage="clarification_required",
+                    ann_prediction=ann,
+                    warnings=self._surrogate_warnings(surrogate),
+                    clarification={
+                        "reason": "Surrogate confidence is below safety threshold for automatic execution.",
+                        "missing_fields": [],
+                        "suggested_questions": [
+                            "Do you want to continue with best-effort execution despite low surrogate confidence?",
+                            "Can you relax target bandwidth or center-frequency tolerance?",
+                        ],
+                        "safe_next_step": "Submit updated request constraints or switch fallback_behavior to best_effort.",
+                    },
+                )
+
+            if fallback_behavior == "return_error":
+                decision_reason = "surrogate_confidence_below_threshold"
+                stop_reason = "surrogate_rejected_by_policy"
+                self.session_store.create(
+                    session_id=session_id,
+                    trace_id=trace_id,
+                    request_payload=request.model_dump(mode="json"),
+                    ann_payload=ann.model_dump(mode="json"),
+                    surrogate_validation=surrogate,
+                    command_package=None,
+                    max_iterations=request.optimization_policy.max_iterations,
+                    initial_status="error",
+                    stop_reason=stop_reason,
+                    decision_reason=decision_reason,
+                )
+                return OptimizeResponse(
+                    status="error",
+                    session_id=session_id,
+                    trace_id=trace_id,
+                    current_stage="failed",
+                    ann_prediction=ann,
+                    warnings=self._surrogate_warnings(surrogate),
+                    error={
+                        "code": "LOW_SURROGATE_CONFIDENCE",
+                        "message": "Request rejected by policy because surrogate confidence is below threshold.",
+                        "retryable": True,
+                        "details": surrogate,
+                    },
+                )
+
         command_package = build_command_package(request, ann, session_id=session_id, trace_id=trace_id, iteration_index=0)
 
         self.session_store.create(
@@ -30,8 +118,12 @@ class CentralBrain:
             trace_id=trace_id,
             request_payload=request.model_dump(mode="json"),
             ann_payload=ann.model_dump(mode="json"),
+            surrogate_validation=surrogate,
             command_package=command_package,
             max_iterations=request.optimization_policy.max_iterations,
+            initial_status="accepted",
+            stop_reason=None,
+            decision_reason="surrogate_confidence_sufficient",
         )
 
         return OptimizeResponse(
@@ -41,6 +133,44 @@ class CentralBrain:
             current_stage="planning_commands",
             ann_prediction=ann,
             command_package=command_package,
+            warnings=self._surrogate_warnings(surrogate),
+        )
+
+    def _append_manifest_history(
+        self,
+        *,
+        session: dict[str, Any],
+        iteration_index: int,
+        decision_reason: str,
+        stop_reason: str | None,
+        command_package: dict[str, Any] | None,
+    ) -> None:
+        manifest = session.get("artifact_manifest")
+        if not isinstance(manifest, dict):
+            return
+        manifest_typed = cast(dict[str, Any], manifest)
+
+        now = datetime.now(timezone.utc).isoformat()
+        checksum: str | None = None
+        if command_package is not None:
+            checksum = self.session_store.payload_checksum(command_package)
+            manifest_typed["latest_command_package_checksum_sha256"] = checksum
+
+        manifest_typed["latest_iteration_index"] = int(iteration_index)
+        manifest_typed["updated_at"] = now
+        history = manifest_typed.get("history")
+        if not isinstance(history, list):
+            history = []
+            manifest_typed["history"] = history
+        manifest_history = cast(list[dict[str, Any]], history)
+        manifest_history.append(
+            {
+                "timestamp": now,
+                "iteration_index": int(iteration_index),
+                "decision_reason": decision_reason,
+                "stop_reason": stop_reason,
+                "command_package_checksum_sha256": checksum,
+            }
         )
 
     def process_feedback(self, payload: dict[str, Any]) -> dict[str, Any]:
@@ -57,11 +187,18 @@ class CentralBrain:
 
         current_ann = AnnPrediction.model_validate(session["current_ann_prediction"])
         evaluation = evaluate_acceptance(request, payload)
+        decision_reason = "acceptance_criteria_not_met"
+        stop_reason: str | None = None
+        if bool(evaluation["accepted"]):
+            decision_reason = "acceptance_criteria_met"
+            stop_reason = "acceptance_criteria_met"
 
         history_item: dict[str, Any] = {
             "type": "feedback_evaluation",
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "iteration_index": current_iteration,
+            "decision_reason": decision_reason,
+            "stop_reason": stop_reason,
             "feedback": payload,
             "evaluation": evaluation,
         }
@@ -69,7 +206,15 @@ class CentralBrain:
 
         if bool(evaluation["accepted"]):
             session["status"] = "completed"
+            session["stop_reason"] = "acceptance_criteria_met"
             session["current_iteration"] = current_iteration
+            self._append_manifest_history(
+                session=session,
+                iteration_index=current_iteration,
+                decision_reason="acceptance_criteria_met",
+                stop_reason="acceptance_criteria_met",
+                command_package=session.get("current_command_package"),
+            )
             self.session_store.save(session_id, session)
             return {
                 "status": "completed",
@@ -77,12 +222,24 @@ class CentralBrain:
                 "trace_id": session["trace_id"],
                 "accepted": True,
                 "iteration_index": current_iteration,
+                "decision_reason": "acceptance_criteria_met",
+                "stop_reason": "acceptance_criteria_met",
                 "evaluation": evaluation,
                 "message": "Acceptance criteria met. No further refinement needed.",
             }
 
         if current_iteration + 1 >= int(session["max_iterations"]):
             session["status"] = "max_iterations_reached"
+            session["stop_reason"] = "max_iterations_reached"
+            session["history"][-1]["decision_reason"] = "max_iterations_reached_without_acceptance"
+            session["history"][-1]["stop_reason"] = "max_iterations_reached"
+            self._append_manifest_history(
+                session=session,
+                iteration_index=current_iteration,
+                decision_reason="max_iterations_reached_without_acceptance",
+                stop_reason="max_iterations_reached",
+                command_package=session.get("current_command_package"),
+            )
             self.session_store.save(session_id, session)
             return {
                 "status": "stopped",
@@ -90,6 +247,8 @@ class CentralBrain:
                 "trace_id": session["trace_id"],
                 "accepted": False,
                 "iteration_index": current_iteration,
+                "decision_reason": "max_iterations_reached_without_acceptance",
+                "stop_reason": "max_iterations_reached",
                 "evaluation": evaluation,
                 "message": "Max iterations reached before acceptance.",
             }
@@ -106,6 +265,7 @@ class CentralBrain:
 
         session["current_iteration"] = next_iteration
         session["status"] = "refining_design"
+        session["stop_reason"] = None
         session["current_ann_prediction"] = refined_ann.model_dump(mode="json")
         session["current_command_package"] = next_command_package
         session["history"].append(
@@ -113,9 +273,18 @@ class CentralBrain:
                 "type": "refinement_plan",
                 "timestamp": datetime.now(timezone.utc).isoformat(),
                 "iteration_index": next_iteration,
+                "decision_reason": "apply_refinement_strategy_due_to_unmet_acceptance",
+                "stop_reason": None,
                 "ann_prediction": refined_ann.model_dump(mode="json"),
                 "command_package": next_command_package,
             }
+        )
+        self._append_manifest_history(
+            session=session,
+            iteration_index=next_iteration,
+            decision_reason="apply_refinement_strategy_due_to_unmet_acceptance",
+            stop_reason=None,
+            command_package=next_command_package,
         )
         self.session_store.save(session_id, session)
 
@@ -125,6 +294,8 @@ class CentralBrain:
             "trace_id": session["trace_id"],
             "accepted": False,
             "iteration_index": next_iteration,
+            "decision_reason": "apply_refinement_strategy_due_to_unmet_acceptance",
+            "stop_reason": None,
             "evaluation": evaluation,
             "next_command_package": next_command_package,
             "message": "Generated refined command package for next iteration.",

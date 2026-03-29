@@ -96,6 +96,9 @@ def test_optimize_feedback_refine_complete_and_query(tmp_path: Path) -> None:
     optimize_response = client.post("/api/v1/optimize", json=_optimize_payload())
     assert optimize_response.status_code == 200
     optimize_data = optimize_response.json()
+    assert len(optimize_data["warnings"]) >= 3
+    assert "surrogate_confidence=" in optimize_data["warnings"][0]
+    assert "surrogate_residuals:" in optimize_data["warnings"][1]
 
     session_id = optimize_data["session_id"]
     trace_id = optimize_data["trace_id"]
@@ -104,6 +107,8 @@ def test_optimize_feedback_refine_complete_and_query(tmp_path: Path) -> None:
     initial_session = client.get(f"/api/v1/sessions/{session_id}")
     assert initial_session.status_code == 200
     assert initial_session.json()["status"] == "accepted"
+    assert initial_session.json()["surrogate_summary"] is not None
+    assert isinstance(initial_session.json()["surrogate_validation"], dict)
     assert initial_session.json()["history_count"] == 1
 
     # First feedback intentionally fails acceptance to force refinement.
@@ -123,6 +128,8 @@ def test_optimize_feedback_refine_complete_and_query(tmp_path: Path) -> None:
     assert feedback_1_data["status"] == "refining"
     assert feedback_1_data["accepted"] is False
     assert feedback_1_data["iteration_index"] == 1
+    assert feedback_1_data["decision_reason"] == "apply_refinement_strategy_due_to_unmet_acceptance"
+    assert feedback_1_data["stop_reason"] is None
     assert feedback_1_data["next_command_package"]["iteration_index"] == 1
 
     # Second feedback satisfies acceptance to complete the session.
@@ -142,15 +149,31 @@ def test_optimize_feedback_refine_complete_and_query(tmp_path: Path) -> None:
     assert feedback_2_data["status"] == "completed"
     assert feedback_2_data["accepted"] is True
     assert feedback_2_data["iteration_index"] == 1
+    assert feedback_2_data["decision_reason"] == "acceptance_criteria_met"
+    assert feedback_2_data["stop_reason"] == "acceptance_criteria_met"
 
     final_session = client.get(f"/api/v1/sessions/{session_id}")
     assert final_session.status_code == 200
     final_session_data = final_session.json()
     assert final_session_data["status"] == "completed"
+    assert final_session_data["stop_reason"] == "acceptance_criteria_met"
+    assert final_session_data["surrogate_summary"] is not None
     assert final_session_data["current_iteration"] == 1
     assert final_session_data["history_count"] == 4
 
     stored_session = server.session_store.load(session_id)
+    manifest = stored_session["artifact_manifest"]
+    assert manifest["manifest_version"] == "artifact_manifest.v1"
+    assert manifest["request_schema_version"] == "optimize_request.v1"
+    assert manifest["command_schema_version"] == "cst_command_package.v1"
+    assert manifest["ann_model_version"] == "v1"
+    assert manifest["latest_iteration_index"] == 1
+    assert isinstance(manifest["latest_command_package_checksum_sha256"], str)
+    assert len(manifest["latest_command_package_checksum_sha256"]) == 64
+    assert len(manifest["history"]) == 3
+
     for entry in stored_session["history"]:
         assert "timestamp" in entry
         assert isinstance(entry["timestamp"], str)
+        assert "decision_reason" in entry
+        assert "stop_reason" in entry

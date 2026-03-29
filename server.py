@@ -66,11 +66,26 @@ def get_session(session_id: str) -> dict[str, Any]:
     """Retrieve current session state and iteration history."""
     try:
         session = session_store.load(session_id)
+        surrogate_validation = session.get("current_surrogate_validation")
+        surrogate_summary = None
+        if isinstance(surrogate_validation, dict):
+            residual = surrogate_validation.get("residual", {})
+            surrogate_summary = {
+                "accepted": bool(surrogate_validation.get("accepted", False)),
+                "confidence": float(surrogate_validation.get("confidence", 0.0)),
+                "threshold": float(surrogate_validation.get("threshold", 0.0)),
+                "decision_reason": surrogate_validation.get("decision_reason"),
+                "center_frequency_abs_error_ghz": float(residual.get("center_frequency_abs_error_ghz", 0.0)),
+                "bandwidth_abs_error_mhz": float(residual.get("bandwidth_abs_error_mhz", 0.0)),
+            }
         return {
             "session_id": session_id,
             "status": session.get("status", "unknown"),
+            "stop_reason": session.get("stop_reason"),
             "current_iteration": session.get("current_iteration", 0),
             "max_iterations": session.get("max_iterations", 0),
+            "surrogate_validation": surrogate_validation,
+            "surrogate_summary": surrogate_summary,
             "history_count": len(session.get("history", [])),
             "latest_entry": session.get("history", [{}])[-1] if session.get("history") else None,
         }
