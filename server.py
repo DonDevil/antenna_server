@@ -6,6 +6,7 @@ from typing import Any
 
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 
+from app.core.exceptions import FamilyProfileConstraintError, UnsupportedAntennaFamilyError
 from app.core.json_contracts import ContractValidationError, validate_contract
 from app.core.schemas import OptimizeRequest, OptimizeResponse
 from app.core.session_store import SessionStore
@@ -41,6 +42,10 @@ def optimize(payload: dict[str, Any]) -> OptimizeResponse:
         return response
     except ContractValidationError as exc:
         raise HTTPException(status_code=422, detail={"error_code": "SCHEMA_VALIDATION_FAILED", "message": str(exc)}) from exc
+    except UnsupportedAntennaFamilyError as exc:
+        raise HTTPException(status_code=422, detail={"error_code": "FAMILY_NOT_SUPPORTED", "message": str(exc)}) from exc
+    except FamilyProfileConstraintError as exc:
+        raise HTTPException(status_code=422, detail={"error_code": "FAMILY_PROFILE_CONSTRAINT_FAILED", "message": str(exc)}) from exc
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 

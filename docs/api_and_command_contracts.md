@@ -62,6 +62,12 @@ Error response fields:
 - `trace_id`: UUID
 - `error`: object with code, message, retryability, details
 
+Validation error codes returned as HTTP 422 for optimize:
+
+- `SCHEMA_VALIDATION_FAILED`
+- `FAMILY_NOT_SUPPORTED`
+- `FAMILY_PROFILE_CONSTRAINT_FAILED`
+
 ### `GET /api/v1/sessions/{session_id}`
 
 Returns current state, latest results, active iteration, and artifact references.
@@ -76,7 +82,7 @@ Returns status of:
 - ANN model availability
 - writable artifact storage
 
-### `WS /ws/v1/sessions/{session_id}/events`
+### `WS /api/v1/sessions/{session_id}/stream`
 
 Streams stage changes and iteration feedback.
 
@@ -107,6 +113,24 @@ Event types:
 - `failed`
 
 ## Core Request Contract
+
+## Family Registry Contract
+
+Family handling is configuration-driven via server registry profiles, not hard-coded per endpoint.
+
+Current registered families:
+
+- `amc_patch`
+- `microstrip_patch`
+- `wban_patch`
+
+Server behavior:
+
+- Normalize requested `target_spec.antenna_family` to a registered profile.
+- Apply profile defaults when generic defaults are supplied for materials/substrates.
+- Reject unsupported families with `FAMILY_NOT_SUPPORTED`.
+- Reject disallowed family constraints with `FAMILY_PROFILE_CONSTRAINT_FAILED`.
+- Persist normalized request and family-driven decisions into session artifacts for replay.
 
 ### `target_spec`
 
@@ -236,6 +260,8 @@ The returned clarification payload must contain:
 - `missing_fields`
 - `suggested_questions`
 - `safe_next_step`
+
+Note: unsupported family is now a deterministic validation error (`FAMILY_NOT_SUPPORTED`) when request validation reaches family profile enforcement.
 
 ## Feedback Contract from Client
 

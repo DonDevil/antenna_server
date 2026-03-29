@@ -6,6 +6,7 @@ from typing import Any, cast
 
 from app.ann.predictor import AnnPredictor
 from app.commands.planner import build_command_package
+from app.core.family_registry import apply_family_profile
 from app.core.refinement import evaluate_acceptance, refine_prediction
 from app.core.schemas import AnnPrediction, OptimizeRequest, OptimizeResponse
 from app.core.session_store import SessionStore
@@ -41,12 +42,13 @@ class CentralBrain:
     def optimize(self, request: OptimizeRequest) -> OptimizeResponse:
         session_id = request.session_id or str(uuid.uuid4())
         trace_id = str(uuid.uuid4())
+        normalized_request = apply_family_profile(request)
 
-        ann = self.ann_predictor.predict(request.target_spec)
-        surrogate = validate_with_surrogate(request, ann)
+        ann = self.ann_predictor.predict(normalized_request.target_spec)
+        surrogate = validate_with_surrogate(normalized_request, ann)
 
         if not bool(surrogate["accepted"]):
-            fallback_behavior = request.optimization_policy.fallback_behavior
+            fallback_behavior = normalized_request.optimization_policy.fallback_behavior
 
             if fallback_behavior == "require_user_confirmation":
                 decision_reason = "surrogate_confidence_below_threshold"
@@ -54,14 +56,14 @@ class CentralBrain:
                 self.session_store.create(
                     session_id=session_id,
                     trace_id=trace_id,
-                    request_payload=request.model_dump(mode="json"),
+                    request_payload=normalized_request.model_dump(mode="json"),
                     ann_payload=ann.model_dump(mode="json"),
                     surrogate_validation=surrogate,
                     command_package=None,
-                    max_iterations=request.optimization_policy.max_iterations,
+                    max_iterations=normalized_request.optimization_policy.max_iterations,
                     initial_status="clarification_required",
                     stop_reason=stop_reason,
-                    decision_reason=decision_reason,
+                    decision_reason="surrogate_confidence_below_threshold_requires_confirmation",
                 )
                 return OptimizeResponse(
                     status="clarification_required",
@@ -87,14 +89,14 @@ class CentralBrain:
                 self.session_store.create(
                     session_id=session_id,
                     trace_id=trace_id,
-                    request_payload=request.model_dump(mode="json"),
+                    request_payload=normalized_request.model_dump(mode="json"),
                     ann_payload=ann.model_dump(mode="json"),
                     surrogate_validation=surrogate,
                     command_package=None,
-                    max_iterations=request.optimization_policy.max_iterations,
+                    max_iterations=normalized_request.optimization_policy.max_iterations,
                     initial_status="error",
                     stop_reason=stop_reason,
-                    decision_reason=decision_reason,
+                    decision_reason="surrogate_confidence_below_threshold_rejected_by_policy",
                 )
                 return OptimizeResponse(
                     status="error",
@@ -111,19 +113,19 @@ class CentralBrain:
                     },
                 )
 
-        command_package = build_command_package(request, ann, session_id=session_id, trace_id=trace_id, iteration_index=0)
+        command_package = build_command_package(normalized_request, ann, session_id=session_id, trace_id=trace_id, iteration_index=0)
 
         self.session_store.create(
             session_id=session_id,
             trace_id=trace_id,
-            request_payload=request.model_dump(mode="json"),
+            request_payload=normalized_request.model_dump(mode="json"),
             ann_payload=ann.model_dump(mode="json"),
             surrogate_validation=surrogate,
             command_package=command_package,
-            max_iterations=request.optimization_policy.max_iterations,
+            max_iterations=normalized_request.optimization_policy.max_iterations,
             initial_status="accepted",
             stop_reason=None,
-            decision_reason="surrogate_confidence_sufficient",
+            decision_reason="family_profile_applied_and_surrogate_confidence_sufficient",
         )
 
         return OptimizeResponse(

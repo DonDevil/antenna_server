@@ -12,6 +12,7 @@ antenna_server/
       planner.py
     core/
       exceptions.py
+      family_registry.py
       json_contracts.py
       refinement.py
       schemas.py
@@ -84,8 +85,10 @@ antenna_server/
 5. `central_brain.py` performs ANN prediction, command planning, iterative refinement, and session updates.
 6. `app/core/session_store.py` persists per-session history to `sessions/`.
 7. `scripts/replay_session.py` reconstructs an auditable iteration timeline from stored session JSON.
+8. `app/core/family_registry.py` applies antenna-family profile defaults and enforces family-specific material/substrate constraints before planning.
 
 ## Notes
 
 - `sessions/`, `data/`, and model artifacts are runtime/generated outputs and should not be treated as source code.
 - WebSocket events are validated against `schemas/ws/session_event.v1.json` before emission.
+- Family profile enforcement is centralized in `app/core/family_registry.py` and surfaced to API clients as schema-safe 422 errors.
