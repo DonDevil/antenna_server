@@ -10,6 +10,7 @@ def build_command_package(
     ann: AnnPrediction,
     session_id: str,
     trace_id: str,
+    iteration_index: int = 0,
 ) -> dict[str, Any]:
     req_any = cast(Any, request)
     ann_any = cast(Any, ann)
@@ -158,7 +159,7 @@ def build_command_package(
         "session_id": session_id,
         "trace_id": trace_id,
         "design_id": f"design_{session_id}",
-        "iteration_index": 0,
+        "iteration_index": int(iteration_index),
         "units": {"geometry": "mm", "frequency": "ghz"},
         "predicted_dimensions": dims,
         "predicted_metrics": {

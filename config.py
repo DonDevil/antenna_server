@@ -10,6 +10,7 @@ DATA_DIR = ROOT_DIR / "data"
 MODELS_DIR = ROOT_DIR / "models"
 CONTEXT_DIR = ROOT_DIR / "context_files"
 SCHEMAS_DIR = ROOT_DIR / "schemas"
+SESSIONS_DIR = ROOT_DIR / "sessions"
 
 
 @dataclass(frozen=True)
