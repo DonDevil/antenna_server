@@ -1,0 +1,326 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "optimize_request.v1",
+  "title": "Optimize Request v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "user_request",
+    "target_spec",
+    "design_constraints",
+    "optimization_policy",
+    "runtime_preferences",
+    "client_capabilities"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "optimize_request.v1"
+    },
+    "session_id": {
+      "type": ["string", "null"],
+      "minLength": 1
+    },
+    "user_request": {
+      "type": "string",
+      "minLength": 10,
+      "maxLength": 4000
+    },
+    "target_spec": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "frequency_ghz",
+        "bandwidth_mhz"
+      ],
+      "properties": {
+        "frequency_ghz": {
+          "type": "number",
+          "exclusiveMinimum": 0.0,
+          "maximum": 100.0
+        },
+        "bandwidth_mhz": {
+          "type": "number",
+          "exclusiveMinimum": 0.0,
+          "maximum": 5000.0
+        },
+        "antenna_family": {
+          "type": "string",
+          "enum": [
+            "amc_patch",
+            "microstrip_patch",
+            "wban_patch"
+          ],
+          "default": "amc_patch"
+        },
+        "center_tolerance_mhz": {
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 500.0
+        },
+        "min_return_loss_db": {
+          "type": "number",
+          "minimum": -80.0,
+          "maximum": 0.0
+        },
+        "max_vswr": {
+          "type": "number",
+          "minimum": 1.0,
+          "maximum": 10.0
+        },
+        "target_gain_dbi": {
+          "type": "number",
+          "minimum": -20.0,
+          "maximum": 50.0
+        },
+        "polarization": {
+          "type": "string",
+          "enum": [
+            "linear",
+            "circular",
+            "dual",
+            "unspecified"
+          ]
+        }
+      }
+    },
+    "design_constraints": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "allowed_materials",
+        "allowed_substrates"
+      ],
+      "properties": {
+        "patch_length_mm": {
+          "$ref": "#/$defs/range"
+        },
+        "patch_width_mm": {
+          "$ref": "#/$defs/range"
+        },
+        "patch_height_mm": {
+          "$ref": "#/$defs/range"
+        },
+        "substrate_length_mm": {
+          "$ref": "#/$defs/range"
+        },
+        "substrate_width_mm": {
+          "$ref": "#/$defs/range"
+        },
+        "substrate_height_mm": {
+          "$ref": "#/$defs/range"
+        },
+        "feed_length_mm": {
+          "$ref": "#/$defs/range"
+        },
+        "feed_width_mm": {
+          "$ref": "#/$defs/range"
+        },
+        "allowed_materials": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "allowed_substrates": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "manufacturing_notes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 300
+          }
+        }
+      }
+    },
+    "optimization_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mode",
+        "max_iterations",
+        "stop_on_first_valid",
+        "acceptance",
+        "fallback_behavior"
+      ],
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": [
+            "single_pass",
+            "auto_iterate"
+          ]
+        },
+        "max_iterations": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 20
+        },
+        "stop_on_first_valid": {
+          "type": "boolean"
+        },
+        "acceptance": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "center_tolerance_mhz": {
+              "type": "number",
+              "minimum": 0.0,
+              "maximum": 500.0
+            },
+            "minimum_bandwidth_mhz": {
+              "type": "number",
+              "minimum": 0.0,
+              "maximum": 5000.0
+            },
+            "maximum_vswr": {
+              "type": "number",
+              "minimum": 1.0,
+              "maximum": 10.0
+            },
+            "minimum_gain_dbi": {
+              "type": "number",
+              "minimum": -20.0,
+              "maximum": 50.0
+            },
+            "minimum_return_loss_db": {
+              "type": "number",
+              "minimum": -80.0,
+              "maximum": 0.0
+            }
+          }
+        },
+        "fallback_behavior": {
+          "type": "string",
+          "enum": [
+            "best_effort",
+            "return_error",
+            "require_user_confirmation"
+          ]
+        }
+      }
+    },
+    "runtime_preferences": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "require_explanations",
+        "persist_artifacts",
+        "llm_temperature",
+        "timeout_budget_sec",
+        "priority"
+      ],
+      "properties": {
+        "require_explanations": {
+          "type": "boolean"
+        },
+        "persist_artifacts": {
+          "type": "boolean"
+        },
+        "llm_temperature": {
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 1.0
+        },
+        "timeout_budget_sec": {
+          "type": "integer",
+          "minimum": 10,
+          "maximum": 3600
+        },
+        "priority": {
+          "type": "string",
+          "enum": [
+            "normal",
+            "research"
+          ]
+        }
+      }
+    },
+    "client_capabilities": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "supports_farfield_export",
+        "supports_current_distribution_export",
+        "supports_parameter_sweep",
+        "max_simulation_timeout_sec",
+        "export_formats"
+      ],
+      "properties": {
+        "supports_farfield_export": {
+          "type": "boolean"
+        },
+        "supports_current_distribution_export": {
+          "type": "boolean"
+        },
+        "supports_parameter_sweep": {
+          "type": "boolean"
+        },
+        "max_simulation_timeout_sec": {
+          "type": "integer",
+          "minimum": 10,
+          "maximum": 7200
+        },
+        "export_formats": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "enum": [
+              "json",
+              "csv",
+              "txt"
+            ]
+          }
+        }
+      }
+    },
+    "context": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "prior_session_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "experiment_tag": {
+          "type": "string",
+          "maxLength": 100
+        },
+        "notes": {
+          "type": "string",
+          "maxLength": 1000
+        }
+      }
+    }
+  },
+  "$defs": {
+    "range": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "min",
+        "max"
+      ],
+      "properties": {
+        "min": {
+          "type": "number"
+        },
+        "max": {
+          "type": "number"
+        }
+      }
+    }
+  }
+}

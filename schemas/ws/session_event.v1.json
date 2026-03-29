@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "session_event.v1",
+  "title": "Session Event v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "event_type",
+    "session_id",
+    "trace_id",
+    "timestamp",
+    "payload"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "session_event.v1"
+    },
+    "event_type": {
+      "type": "string",
+      "enum": [
+        "session.accepted",
+        "stage.changed",
+        "llm.intent.parsed",
+        "ann.prediction.ready",
+        "command.package.ready",
+        "client.feedback.received",
+        "iteration.completed",
+        "session.completed",
+        "session.failed"
+      ]
+    },
+    "session_id": {
+      "type": "string"
+    },
+    "trace_id": {
+      "type": "string"
+    },
+    "iteration_index": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "payload": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "stage": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "llm_confidence": {
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 1.0
+        },
+        "ann_model_version": {
+          "type": "string"
+        },
+        "accepted": {
+          "type": "boolean"
+        },
+        "metrics_delta": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "center_frequency_error_mhz": {
+              "type": "number"
+            },
+            "bandwidth_error_mhz": {
+              "type": "number"
+            },
+            "vswr_error": {
+              "type": "number"
+            },
+            "gain_error_dbi": {
+              "type": "number"
+            }
+          }
+        }
+      }
+    }
+  }
+}

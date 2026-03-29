@@ -1,0 +1,102 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "client_feedback.v1",
+  "title": "Client Feedback v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "session_id",
+    "trace_id",
+    "design_id",
+    "iteration_index",
+    "simulation_status",
+    "actual_center_frequency_ghz",
+    "actual_bandwidth_mhz",
+    "actual_return_loss_db",
+    "actual_vswr",
+    "actual_gain_dbi",
+    "artifacts"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "client_feedback.v1"
+    },
+    "session_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "trace_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "design_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "iteration_index": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "simulation_status": {
+      "type": "string",
+      "enum": [
+        "completed",
+        "failed",
+        "timeout",
+        "cancelled"
+      ]
+    },
+    "actual_center_frequency_ghz": {
+      "type": "number",
+      "exclusiveMinimum": 0.0
+    },
+    "actual_bandwidth_mhz": {
+      "type": "number",
+      "minimum": 0.0
+    },
+    "actual_return_loss_db": {
+      "type": "number",
+      "minimum": -120.0,
+      "maximum": 10.0
+    },
+    "actual_vswr": {
+      "type": "number",
+      "minimum": 1.0,
+      "maximum": 100.0
+    },
+    "actual_gain_dbi": {
+      "type": "number",
+      "minimum": -100.0,
+      "maximum": 100.0
+    },
+    "notes": {
+      "type": "string",
+      "maxLength": 2000
+    },
+    "artifacts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "s11_trace_ref",
+        "summary_metrics_ref"
+      ],
+      "properties": {
+        "s11_trace_ref": {
+          "type": "string",
+          "minLength": 1
+        },
+        "farfield_ref": {
+          "type": ["string", "null"]
+        },
+        "current_distribution_ref": {
+          "type": ["string", "null"]
+        },
+        "summary_metrics_ref": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,252 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "optimize_response.v1",
+  "title": "Optimize Response v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "status",
+    "trace_id"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "optimize_response.v1"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "accepted",
+        "completed",
+        "clarification_required",
+        "error"
+      ]
+    },
+    "session_id": {
+      "type": "string"
+    },
+    "trace_id": {
+      "type": "string"
+    },
+    "current_stage": {
+      "type": "string",
+      "enum": [
+        "received",
+        "validating_request",
+        "parsing_intent",
+        "clarification_required",
+        "ann_predicting",
+        "planning_commands",
+        "awaiting_client",
+        "evaluating_feedback",
+        "refining_design",
+        "completed",
+        "failed"
+      ]
+    },
+    "intent_summary": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "properties": {
+        "normalized_frequency_ghz": {
+          "type": "number"
+        },
+        "normalized_bandwidth_mhz": {
+          "type": "number"
+        },
+        "antenna_family": {
+          "type": "string"
+        },
+        "llm_confidence": {
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 1.0
+        },
+        "needs_clarification": {
+          "type": "boolean"
+        }
+      }
+    },
+    "ann_prediction": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "properties": {
+        "ann_model_version": {
+          "type": "string"
+        },
+        "training_data_version": {
+          "type": "string"
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 1.0
+        },
+        "dimensions": {
+          "$ref": "#/$defs/dimensions"
+        }
+      }
+    },
+    "command_package": {
+      "type": ["object", "null"],
+      "additionalProperties": true
+    },
+    "simulation_feedback": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "properties": {
+        "simulation_status": {
+          "type": "string",
+          "enum": [
+            "pending",
+            "running",
+            "completed",
+            "failed",
+            "timeout"
+          ]
+        },
+        "actual_center_frequency_ghz": {
+          "type": "number"
+        },
+        "actual_bandwidth_mhz": {
+          "type": "number"
+        },
+        "actual_return_loss_db": {
+          "type": "number"
+        },
+        "actual_vswr": {
+          "type": "number"
+        },
+        "actual_gain_dbi": {
+          "type": "number"
+        }
+      }
+    },
+    "iteration_state": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": [
+            "single_pass",
+            "auto_iterate"
+          ]
+        },
+        "current_iteration": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "max_iterations": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "stop_reason": {
+          "type": ["string", "null"]
+        }
+      }
+    },
+    "clarification": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "properties": {
+        "reason": {
+          "type": "string"
+        },
+        "missing_fields": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "suggested_questions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "safe_next_step": {
+          "type": "string"
+        }
+      }
+    },
+    "artifacts": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "properties": {
+        "session_manifest": {
+          "type": ["string", "null"]
+        },
+        "command_package": {
+          "type": ["string", "null"]
+        },
+        "simulation_result": {
+          "type": ["string", "null"]
+        }
+      }
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "error": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "retryable": {
+          "type": "boolean"
+        },
+        "details": {
+          "type": ["object", "null"],
+          "additionalProperties": true
+        }
+      }
+    }
+  },
+  "$defs": {
+    "dimensions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "patch_length_mm": {
+          "type": "number"
+        },
+        "patch_width_mm": {
+          "type": "number"
+        },
+        "patch_height_mm": {
+          "type": "number"
+        },
+        "substrate_length_mm": {
+          "type": "number"
+        },
+        "substrate_width_mm": {
+          "type": "number"
+        },
+        "substrate_height_mm": {
+          "type": "number"
+        },
+        "feed_length_mm": {
+          "type": "number"
+        },
+        "feed_width_mm": {
+          "type": "number"
+        },
+        "feed_offset_x_mm": {
+          "type": "number"
+        },
+        "feed_offset_y_mm": {
+          "type": "number"
+        }
+      }
+    }
+  }
+}

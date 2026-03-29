@@ -1,0 +1,522 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "cst_command_package.v1",
+  "title": "CST Command Package v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "command_catalog_version",
+    "session_id",
+    "trace_id",
+    "design_id",
+    "iteration_index",
+    "units",
+    "predicted_dimensions",
+    "commands",
+    "expected_exports",
+    "safety_checks"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "cst_command_package.v1"
+    },
+    "command_catalog_version": {
+      "type": "string"
+    },
+    "session_id": {
+      "type": "string"
+    },
+    "trace_id": {
+      "type": "string"
+    },
+    "design_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "iteration_index": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "units": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "geometry",
+        "frequency"
+      ],
+      "properties": {
+        "geometry": {
+          "type": "string",
+          "enum": [
+            "mm"
+          ]
+        },
+        "frequency": {
+          "type": "string",
+          "enum": [
+            "ghz"
+          ]
+        }
+      }
+    },
+    "predicted_dimensions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "patch_length_mm",
+        "patch_width_mm",
+        "patch_height_mm",
+        "substrate_length_mm",
+        "substrate_width_mm",
+        "substrate_height_mm",
+        "feed_length_mm",
+        "feed_width_mm",
+        "feed_offset_x_mm",
+        "feed_offset_y_mm"
+      ],
+      "properties": {
+        "patch_length_mm": {"type": "number", "exclusiveMinimum": 0.0},
+        "patch_width_mm": {"type": "number", "exclusiveMinimum": 0.0},
+        "patch_height_mm": {"type": "number", "exclusiveMinimum": 0.0},
+        "substrate_length_mm": {"type": "number", "exclusiveMinimum": 0.0},
+        "substrate_width_mm": {"type": "number", "exclusiveMinimum": 0.0},
+        "substrate_height_mm": {"type": "number", "exclusiveMinimum": 0.0},
+        "feed_length_mm": {"type": "number", "exclusiveMinimum": 0.0},
+        "feed_width_mm": {"type": "number", "exclusiveMinimum": 0.0},
+        "feed_offset_x_mm": {"type": "number"},
+        "feed_offset_y_mm": {"type": "number"}
+      }
+    },
+    "predicted_metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "center_frequency_ghz": {"type": "number"},
+        "bandwidth_mhz": {"type": "number"},
+        "gain_dbi": {"type": "number"},
+        "vswr": {"type": "number"}
+      }
+    },
+    "commands": {
+      "type": "array",
+      "minItems": 12,
+      "items": {
+        "$ref": "#/$defs/command"
+      }
+    },
+    "expected_exports": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "enum": [
+          "s_parameters",
+          "farfield",
+          "summary_metrics"
+        ]
+      }
+    },
+    "safety_checks": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "enum": [
+          "dimensions_within_constraints",
+          "command_order_validated",
+          "materials_whitelisted",
+          "client_capability_compatible",
+          "simulation_timeout_bounded"
+        ]
+      }
+    }
+  },
+  "$defs": {
+    "commandBase": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "seq",
+        "command",
+        "params",
+        "on_failure",
+        "checksum_scope"
+      ],
+      "properties": {
+        "seq": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "command": {
+          "type": "string"
+        },
+        "params": {
+          "type": "object"
+        },
+        "on_failure": {
+          "type": "string",
+          "enum": [
+            "abort",
+            "retry_once",
+            "continue"
+          ]
+        },
+        "checksum_scope": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "command": {
+      "oneOf": [
+        {
+          "allOf": [
+            {"$ref": "#/$defs/commandBase"},
+            {
+              "properties": {
+                "command": {"const": "create_project"},
+                "params": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["project_name"],
+                  "properties": {
+                    "project_name": {"type": "string", "minLength": 1, "maxLength": 120}
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {"$ref": "#/$defs/commandBase"},
+            {
+              "properties": {
+                "command": {"const": "set_units"},
+                "params": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["geometry", "frequency"],
+                  "properties": {
+                    "geometry": {"const": "mm"},
+                    "frequency": {"const": "ghz"}
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {"$ref": "#/$defs/commandBase"},
+            {
+              "properties": {
+                "command": {"const": "set_frequency_range"},
+                "params": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["start_ghz", "stop_ghz"],
+                  "properties": {
+                    "start_ghz": {"type": "number", "exclusiveMinimum": 0.0},
+                    "stop_ghz": {"type": "number", "exclusiveMinimum": 0.0}
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {"$ref": "#/$defs/commandBase"},
+            {
+              "properties": {
+                "command": {"const": "define_material"},
+                "params": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["name", "kind"],
+                  "properties": {
+                    "name": {"type": "string", "minLength": 1},
+                    "kind": {"type": "string", "enum": ["conductor", "substrate"]},
+                    "epsilon_r": {"type": "number", "exclusiveMinimum": 0.0},
+                    "loss_tangent": {"type": "number", "minimum": 0.0, "maximum": 10.0},
+                    "conductivity_s_per_m": {"type": "number", "exclusiveMinimum": 0.0}
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {"$ref": "#/$defs/commandBase"},
+            {
+              "properties": {
+                "command": {"const": "create_substrate"},
+                "params": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["name", "material", "length_mm", "width_mm", "height_mm", "origin_mm"],
+                  "properties": {
+                    "name": {"type": "string"},
+                    "material": {"type": "string"},
+                    "length_mm": {"type": "number", "exclusiveMinimum": 0.0},
+                    "width_mm": {"type": "number", "exclusiveMinimum": 0.0},
+                    "height_mm": {"type": "number", "exclusiveMinimum": 0.0},
+                    "origin_mm": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": ["x", "y", "z"],
+                      "properties": {
+                        "x": {"type": "number"},
+                        "y": {"type": "number"},
+                        "z": {"type": "number"}
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {"$ref": "#/$defs/commandBase"},
+            {
+              "properties": {
+                "command": {"const": "create_ground_plane"},
+                "params": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["name", "material", "length_mm", "width_mm", "thickness_mm", "z_mm"],
+                  "properties": {
+                    "name": {"type": "string"},
+                    "material": {"type": "string"},
+                    "length_mm": {"type": "number", "exclusiveMinimum": 0.0},
+                    "width_mm": {"type": "number", "exclusiveMinimum": 0.0},
+                    "thickness_mm": {"type": "number", "exclusiveMinimum": 0.0},
+                    "z_mm": {"type": "number"}
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {"$ref": "#/$defs/commandBase"},
+            {
+              "properties": {
+                "command": {"const": "create_patch"},
+                "params": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["name", "material", "length_mm", "width_mm", "thickness_mm", "center_mm"],
+                  "properties": {
+                    "name": {"type": "string"},
+                    "material": {"type": "string"},
+                    "length_mm": {"type": "number", "exclusiveMinimum": 0.0},
+                    "width_mm": {"type": "number", "exclusiveMinimum": 0.0},
+                    "thickness_mm": {"type": "number", "exclusiveMinimum": 0.0},
+                    "center_mm": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": ["x", "y", "z"],
+                      "properties": {
+                        "x": {"type": "number"},
+                        "y": {"type": "number"},
+                        "z": {"type": "number"}
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {"$ref": "#/$defs/commandBase"},
+            {
+              "properties": {
+                "command": {"const": "create_feedline"},
+                "params": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["name", "material", "length_mm", "width_mm", "thickness_mm", "start_mm", "end_mm"],
+                  "properties": {
+                    "name": {"type": "string"},
+                    "material": {"type": "string"},
+                    "length_mm": {"type": "number", "exclusiveMinimum": 0.0},
+                    "width_mm": {"type": "number", "exclusiveMinimum": 0.0},
+                    "thickness_mm": {"type": "number", "exclusiveMinimum": 0.0},
+                    "start_mm": {"$ref": "#/$defs/point3d"},
+                    "end_mm": {"$ref": "#/$defs/point3d"}
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {"$ref": "#/$defs/commandBase"},
+            {
+              "properties": {
+                "command": {"const": "create_port"},
+                "params": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["port_id", "port_type", "impedance_ohm", "reference_mm"],
+                  "properties": {
+                    "port_id": {"type": "integer", "minimum": 1},
+                    "port_type": {"type": "string", "enum": ["discrete", "waveguide"]},
+                    "impedance_ohm": {"type": "number", "exclusiveMinimum": 0.0},
+                    "reference_mm": {"$ref": "#/$defs/point3d"}
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {"$ref": "#/$defs/commandBase"},
+            {
+              "properties": {
+                "command": {"const": "set_boundary"},
+                "params": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["boundary_type"],
+                  "properties": {
+                    "boundary_type": {"type": "string", "enum": ["open_add_space", "expanded_open"]},
+                    "padding_mm": {"type": "number", "minimum": 0.0}
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {"$ref": "#/$defs/commandBase"},
+            {
+              "properties": {
+                "command": {"const": "set_solver"},
+                "params": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["solver_type"],
+                  "properties": {
+                    "solver_type": {"type": "string", "enum": ["time_domain", "frequency_domain"]},
+                    "mesh_cells_per_wavelength": {"type": "integer", "minimum": 5, "maximum": 200}
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {"$ref": "#/$defs/commandBase"},
+            {
+              "properties": {
+                "command": {"const": "run_simulation"},
+                "params": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["timeout_sec"],
+                  "properties": {
+                    "timeout_sec": {"type": "integer", "minimum": 10, "maximum": 7200}
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {"$ref": "#/$defs/commandBase"},
+            {
+              "properties": {
+                "command": {"const": "export_s_parameters"},
+                "params": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["format", "destination_hint"],
+                  "properties": {
+                    "format": {"type": "string", "enum": ["json", "csv", "txt"]},
+                    "destination_hint": {"type": "string", "minLength": 1}
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {"$ref": "#/$defs/commandBase"},
+            {
+              "properties": {
+                "command": {"const": "export_farfield"},
+                "params": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["format", "frequency_ghz", "destination_hint"],
+                  "properties": {
+                    "format": {"type": "string", "enum": ["json", "csv", "txt"]},
+                    "frequency_ghz": {"type": "number", "exclusiveMinimum": 0.0},
+                    "destination_hint": {"type": "string", "minLength": 1}
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {"$ref": "#/$defs/commandBase"},
+            {
+              "properties": {
+                "command": {"const": "extract_summary_metrics"},
+                "params": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["metrics"],
+                  "properties": {
+                    "metrics": {
+                      "type": "array",
+                      "minItems": 1,
+                      "items": {
+                        "type": "string",
+                        "enum": [
+                          "center_frequency_ghz",
+                          "bandwidth_mhz",
+                          "return_loss_db",
+                          "vswr",
+                          "gain_dbi"
+                        ]
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "point3d": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["x", "y", "z"],
+      "properties": {
+        "x": {"type": "number"},
+        "y": {"type": "number"},
+        "z": {"type": "number"}
+      }
+    }
+  }
+}
