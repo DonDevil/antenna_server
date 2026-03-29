@@ -118,9 +118,18 @@ def replay_session(session_id: str) -> None:
             print("\nClient Feedback:")
             feedback = entry.get("feedback", {})
             print(f"  Session ID: {feedback.get('session_id', 'N/A')}")
-            print(f"  Reported Iteration: {feedback.get('reported_iteration', 'N/A')}")
+            print(f"  Reported Iteration: {feedback.get('iteration_index', 'N/A')}")
             print("\n  Metrics Received:")
-            print_metrics(feedback.get("metrics", {}), "    ")
+            print_metrics(
+                {
+                    "actual_center_frequency_ghz": feedback.get("actual_center_frequency_ghz"),
+                    "actual_bandwidth_mhz": feedback.get("actual_bandwidth_mhz"),
+                    "actual_return_loss_db": feedback.get("actual_return_loss_db"),
+                    "actual_vswr": feedback.get("actual_vswr"),
+                    "actual_gain_dbi": feedback.get("actual_gain_dbi"),
+                },
+                "    ",
+            )
         
         elif entry_type == "feedback_evaluation":
             print("\nFeedback Evaluation:")
@@ -128,17 +137,23 @@ def replay_session(session_id: str) -> None:
             print(f"  Accepted: {evaluation.get('accepted', False)}")
             if not evaluation.get("accepted"):
                 print("  Error Metrics:")
-                print_metrics(evaluation.get("metrics", {}), "    ")
+                print_metrics(
+                    {
+                        "freq_error_mhz": evaluation.get("freq_error_mhz"),
+                        "bandwidth_gap_mhz": evaluation.get("bandwidth_gap_mhz"),
+                        "vswr_gap": evaluation.get("vswr_gap"),
+                        "gain_gap": evaluation.get("gain_gap"),
+                    },
+                    "    ",
+                )
         
         elif entry_type == "refinement_plan":
             print("\nRefinement Decision:")
-            decision = entry.get("decision", {})
-            print(f"  Next Iteration Index: {decision.get('next_iteration_index', 'N/A')}")
-            print(f"  Reason: {decision.get('reason', 'N/A')}")
+            print(f"  Next Iteration Index: {entry.get('iteration_index', 'N/A')}")
             print("\nRefined ANN Prediction:")
-            print_dimensions(entry.get("refined_ann", {}), "  ")
+            print_dimensions(entry.get("ann_prediction", {}), "  ")
             print("\nNext Command Package:")
-            cmd_pkg = entry.get("next_command_package", {})
+            cmd_pkg = entry.get("command_package", {})
             print(f"  Iteration Index: {cmd_pkg.get('iteration_index', 'N/A')}")
             print(f"  Commands Count: {len(cmd_pkg.get('cst_commands', []))}")
         
@@ -146,7 +161,7 @@ def replay_session(session_id: str) -> None:
             print("\nFinal Feedback:")
             feedback = entry.get("feedback", {})
             print(f"  Session ID: {feedback.get('session_id', 'N/A')}")
-            print(f"  Reported Iteration: {feedback.get('reported_iteration', 'N/A')}")
+            print(f"  Reported Iteration: {feedback.get('iteration_index', 'N/A')}")
             print("\n  Metrics Received:")
             print_metrics(feedback.get("metrics", {}), "    ")
             print("\nFinal Evaluation:")

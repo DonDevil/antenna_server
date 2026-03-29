@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import datetime, timezone
 from typing import Any
 
 from app.ann.predictor import AnnPredictor
@@ -59,6 +60,7 @@ class CentralBrain:
 
         history_item: dict[str, Any] = {
             "type": "feedback_evaluation",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "iteration_index": current_iteration,
             "feedback": payload,
             "evaluation": evaluation,
@@ -109,6 +111,7 @@ class CentralBrain:
         session["history"].append(
             {
                 "type": "refinement_plan",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
                 "iteration_index": next_iteration,
                 "ann_prediction": refined_ann.model_dump(mode="json"),
                 "command_package": next_command_package,

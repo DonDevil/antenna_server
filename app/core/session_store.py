@@ -43,6 +43,7 @@ class SessionStore:
             "history": [
                 {
                     "type": "initial_plan",
+                    "timestamp": now,
                     "iteration_index": 0,
                     "ann_prediction": ann_payload,
                     "command_package": command_package,

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-import json
+from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
@@ -95,42 +95,83 @@ async def stream_session_events(websocket: WebSocket, session_id: str) -> None:
                 if current_history_count > last_history_count:
                     new_entries = session.get("history", [])[last_history_count:]
                     for entry in new_entries:
-                        await websocket.send_json({
-                            "event_type": "iteration_update",
+                        event = {
+                            "schema_version": "session_event.v1",
+                            "event_type": "iteration.completed",
                             "session_id": session_id,
-                            "current_iteration": session.get("current_iteration", 0),
-                            "status": session.get("status", "running"),
-                            "entry": entry,
-                        })
+                            "trace_id": session.get("trace_id", ""),
+                            "iteration_index": int(entry.get("iteration_index", session.get("current_iteration", 0))),
+                            "timestamp": datetime.now(timezone.utc).isoformat(),
+                            "payload": {
+                                "stage": session.get("status", "running"),
+                                "message": "Session history updated",
+                                "accepted": bool(entry.get("evaluation", {}).get("accepted", False)),
+                                "history_entry": entry,
+                            },
+                        }
+                        validate_contract("session_event", event)
+                        await websocket.send_json(event)
                     last_history_count = current_history_count
                 
                 if session.get("status") in ["completed", "max_iterations_reached", "stopped"]:
-                    await websocket.send_json({
-                        "event_type": "session_complete",
+                    terminal_event_type = "session.completed"
+                    if session.get("status") in ["max_iterations_reached", "stopped"]:
+                        terminal_event_type = "session.failed"
+                    terminal_event = {
+                        "schema_version": "session_event.v1",
+                        "event_type": terminal_event_type,
                         "session_id": session_id,
-                        "status": session.get("status"),
-                        "final_iteration": session.get("current_iteration", 0),
-                    })
+                        "trace_id": session.get("trace_id", ""),
+                        "iteration_index": int(session.get("current_iteration", 0)),
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                        "payload": {
+                            "stage": session.get("status", "unknown"),
+                            "message": "Session reached terminal state",
+                            "accepted": bool(session.get("status") == "completed"),
+                        },
+                    }
+                    validate_contract("session_event", terminal_event)
+                    await websocket.send_json(terminal_event)
                     break
                 
                 await asyncio.sleep(1)
                 
             except FileNotFoundError:
-                await websocket.send_json({
-                    "event_type": "error",
-                    "error_code": "SESSION_NOT_FOUND",
-                    "message": f"Session {session_id} not found",
-                })
+                missing_event = {
+                    "schema_version": "session_event.v1",
+                    "event_type": "session.failed",
+                    "session_id": session_id,
+                    "trace_id": "",
+                    "iteration_index": 0,
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "payload": {
+                        "stage": "error",
+                        "message": f"Session {session_id} not found",
+                        "accepted": False,
+                    },
+                }
+                validate_contract("session_event", missing_event)
+                await websocket.send_json(missing_event)
                 break
                 
     except WebSocketDisconnect:
         pass
     except Exception as exc:
         try:
-            await websocket.send_json({
-                "event_type": "error",
-                "error_code": "STREAM_ERROR",
-                "message": str(exc),
-            })
+            error_event = {
+                "schema_version": "session_event.v1",
+                "event_type": "session.failed",
+                "session_id": session_id,
+                "trace_id": "",
+                "iteration_index": 0,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "payload": {
+                    "stage": "error",
+                    "message": str(exc),
+                    "accepted": False,
+                },
+            }
+            validate_contract("session_event", error_event)
+            await websocket.send_json(error_event)
         except Exception:
             pass

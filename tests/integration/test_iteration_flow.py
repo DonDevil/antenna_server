@@ -1,0 +1,156 @@
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Any
+
+from fastapi.testclient import TestClient
+
+import server
+from app.core.session_store import SessionStore
+
+
+def _optimize_payload() -> dict[str, Any]:
+    return {
+        "schema_version": "optimize_request.v1",
+        "user_request": "Design an AMC patch antenna with 2.45 GHz center frequency and 80 MHz bandwidth.",
+        "target_spec": {
+            "frequency_ghz": 2.45,
+            "bandwidth_mhz": 80.0,
+            "antenna_family": "amc_patch",
+        },
+        "design_constraints": {
+            "allowed_materials": ["Copper (annealed)"],
+            "allowed_substrates": ["FR-4 (lossy)"],
+        },
+        "optimization_policy": {
+            "mode": "auto_iterate",
+            "max_iterations": 3,
+            "stop_on_first_valid": True,
+            "acceptance": {
+                "center_tolerance_mhz": 20.0,
+                "minimum_bandwidth_mhz": 80.0,
+                "maximum_vswr": 2.0,
+                "minimum_gain_dbi": 5.0,
+            },
+            "fallback_behavior": "best_effort",
+        },
+        "runtime_preferences": {
+            "require_explanations": False,
+            "persist_artifacts": True,
+            "llm_temperature": 0.0,
+            "timeout_budget_sec": 300,
+            "priority": "normal",
+        },
+        "client_capabilities": {
+            "supports_farfield_export": True,
+            "supports_current_distribution_export": False,
+            "supports_parameter_sweep": False,
+            "max_simulation_timeout_sec": 600,
+            "export_formats": ["json"],
+        },
+    }
+
+
+def _feedback_payload(
+    *,
+    session_id: str,
+    trace_id: str,
+    design_id: str,
+    iteration_index: int,
+    actual_center_frequency_ghz: float,
+    actual_bandwidth_mhz: float,
+    actual_vswr: float,
+    actual_gain_dbi: float,
+) -> dict[str, Any]:
+    return {
+        "schema_version": "client_feedback.v1",
+        "session_id": session_id,
+        "trace_id": trace_id,
+        "design_id": design_id,
+        "iteration_index": iteration_index,
+        "simulation_status": "completed",
+        "actual_center_frequency_ghz": actual_center_frequency_ghz,
+        "actual_bandwidth_mhz": actual_bandwidth_mhz,
+        "actual_return_loss_db": -18.0,
+        "actual_vswr": actual_vswr,
+        "actual_gain_dbi": actual_gain_dbi,
+        "artifacts": {
+            "s11_trace_ref": f"s11_iter{iteration_index}.json",
+            "summary_metrics_ref": f"summary_iter{iteration_index}.json",
+            "farfield_ref": None,
+            "current_distribution_ref": None,
+        },
+    }
+
+
+def _build_test_client(tmp_path: Path) -> TestClient:
+    test_store = SessionStore(base_dir=tmp_path / "sessions")
+    server.session_store = test_store
+    server.brain.session_store = test_store
+    return TestClient(server.app)
+
+
+def test_optimize_feedback_refine_complete_and_query(tmp_path: Path) -> None:
+    client = _build_test_client(tmp_path)
+
+    optimize_response = client.post("/api/v1/optimize", json=_optimize_payload())
+    assert optimize_response.status_code == 200
+    optimize_data = optimize_response.json()
+
+    session_id = optimize_data["session_id"]
+    trace_id = optimize_data["trace_id"]
+    design_id = optimize_data["command_package"]["design_id"]
+
+    initial_session = client.get(f"/api/v1/sessions/{session_id}")
+    assert initial_session.status_code == 200
+    assert initial_session.json()["status"] == "accepted"
+    assert initial_session.json()["history_count"] == 1
+
+    # First feedback intentionally fails acceptance to force refinement.
+    feedback_1 = _feedback_payload(
+        session_id=session_id,
+        trace_id=trace_id,
+        design_id=design_id,
+        iteration_index=0,
+        actual_center_frequency_ghz=2.20,
+        actual_bandwidth_mhz=40.0,
+        actual_vswr=3.2,
+        actual_gain_dbi=2.0,
+    )
+    feedback_1_response = client.post("/api/v1/client-feedback", json=feedback_1)
+    assert feedback_1_response.status_code == 200
+    feedback_1_data = feedback_1_response.json()
+    assert feedback_1_data["status"] == "refining"
+    assert feedback_1_data["accepted"] is False
+    assert feedback_1_data["iteration_index"] == 1
+    assert feedback_1_data["next_command_package"]["iteration_index"] == 1
+
+    # Second feedback satisfies acceptance to complete the session.
+    feedback_2 = _feedback_payload(
+        session_id=session_id,
+        trace_id=trace_id,
+        design_id=design_id,
+        iteration_index=1,
+        actual_center_frequency_ghz=2.451,
+        actual_bandwidth_mhz=90.0,
+        actual_vswr=1.4,
+        actual_gain_dbi=5.8,
+    )
+    feedback_2_response = client.post("/api/v1/client-feedback", json=feedback_2)
+    assert feedback_2_response.status_code == 200
+    feedback_2_data = feedback_2_response.json()
+    assert feedback_2_data["status"] == "completed"
+    assert feedback_2_data["accepted"] is True
+    assert feedback_2_data["iteration_index"] == 1
+
+    final_session = client.get(f"/api/v1/sessions/{session_id}")
+    assert final_session.status_code == 200
+    final_session_data = final_session.json()
+    assert final_session_data["status"] == "completed"
+    assert final_session_data["current_iteration"] == 1
+    assert final_session_data["history_count"] == 4
+
+    stored_session = server.session_store.load(session_id)
+    for entry in stored_session["history"]:
+        assert "timestamp" in entry
+        assert isinstance(entry["timestamp"], str)
