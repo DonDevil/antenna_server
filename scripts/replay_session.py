@@ -112,7 +112,7 @@ def replay_session(session_id: str) -> None:
             print("\nInitial Command Package:")
             cmd_pkg = entry.get("command_package", {})
             print(f"  Iteration Index: {cmd_pkg.get('iteration_index', 'N/A')}")
-            print(f"  Commands Count: {len(cmd_pkg.get('cst_commands', []))}")
+            print(f"  Commands Count: {len(cmd_pkg.get('commands', []))}")
         
         elif entry_type == "feedback_received":
             print("\nClient Feedback:")
@@ -150,12 +150,18 @@ def replay_session(session_id: str) -> None:
         elif entry_type == "refinement_plan":
             print("\nRefinement Decision:")
             print(f"  Next Iteration Index: {entry.get('iteration_index', 'N/A')}")
+            planning = entry.get("planning_provenance", {})
+            if isinstance(planning, dict) and planning:
+                print(f"  Selected Action: {planning.get('selected_action', 'N/A')}")
+                print(f"  Decision Source: {planning.get('decision_source', 'N/A')}")
+                print(f"  Rule ID: {planning.get('rule_id', 'N/A')}")
+                print(f"  Confidence: {planning.get('confidence', 'N/A')}")
             print("\nRefined ANN Prediction:")
             print_dimensions(entry.get("ann_prediction", {}), "  ")
             print("\nNext Command Package:")
             cmd_pkg = entry.get("command_package", {})
             print(f"  Iteration Index: {cmd_pkg.get('iteration_index', 'N/A')}")
-            print(f"  Commands Count: {len(cmd_pkg.get('cst_commands', []))}")
+            print(f"  Commands Count: {len(cmd_pkg.get('commands', []))}")
         
         elif entry_type == "final_feedback":
             print("\nFinal Feedback:")
@@ -181,6 +187,9 @@ def replay_session(session_id: str) -> None:
     print_header("END OF REPLAY")
     print(f"\nFinal Status: {session.get('status', 'unknown')}")
     print(f"Total Iterations: {session.get('current_iteration', 0)}")
+    policy_runtime = session.get("policy_runtime", {})
+    if isinstance(policy_runtime, dict):
+        print(f"LLM Calls Total: {policy_runtime.get('llm_calls_total', 0)}")
 
 
 if __name__ == "__main__":

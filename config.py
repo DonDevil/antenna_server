@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Literal
 
 
 ROOT_DIR = Path(__file__).resolve().parent
@@ -26,6 +27,20 @@ class OllamaSettings:
     base_url: str = "http://localhost:11434"
     model_name: str = "deepseek-r1:8b"
     timeout_sec: int = 45
+
+
+@dataclass(frozen=True)
+class PlannerSettings:
+    mode: Literal["fixed", "dynamic"] = "dynamic"
+    dynamic_enabled: bool = True
+    command_catalog_version: str = "v1"
+    action_plan_version: str = "v1"
+    llm_enabled_for_intent: bool = False
+    llm_enabled_for_refinement: bool = True
+    llm_refinement_confidence_threshold: float = 0.62
+    llm_max_calls_per_session: int = 2
+    llm_max_calls_per_iteration: int = 1
+    session_context_max_history: int = 3
 
 
 @dataclass(frozen=True)
@@ -74,6 +89,7 @@ class Bounds:
 
 API_SETTINGS = ApiSettings()
 OLLAMA_SETTINGS = OllamaSettings()
+PLANNER_SETTINGS = PlannerSettings()
 ANN_SETTINGS = AnnSettings()
 DATA_SETTINGS = DataSettings()
 BOUNDS = Bounds()

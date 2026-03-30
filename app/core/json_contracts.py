@@ -14,6 +14,8 @@ SCHEMA_FILES: dict[str, Path] = {
     "optimize_request": SCHEMAS_DIR / "http" / "optimize_request.v1.json",
     "optimize_response": SCHEMAS_DIR / "http" / "optimize_response.v1.json",
     "command_package": SCHEMAS_DIR / "commands" / "cst_command_package.v1.json",
+    "action_catalog": SCHEMAS_DIR / "planning" / "action_catalog.v1.json",
+    "action_plan": SCHEMAS_DIR / "planning" / "action_plan.v1.json",
     "client_feedback": SCHEMAS_DIR / "http" / "client_feedback.v1.json",
     "session_event": SCHEMAS_DIR / "ws" / "session_event.v1.json",
 }

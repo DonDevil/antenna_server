@@ -89,8 +89,11 @@ def get_session(session_id: str) -> dict[str, Any]:
             "stop_reason": session.get("stop_reason"),
             "current_iteration": session.get("current_iteration", 0),
             "max_iterations": session.get("max_iterations", 0),
+            "intent_summary": session.get("intent_summary"),
             "surrogate_validation": surrogate_validation,
             "surrogate_summary": surrogate_summary,
+            "policy_runtime": session.get("policy_runtime", {}),
+            "latest_planning_decision": session.get("artifact_manifest", {}).get("latest_planning_decision"),
             "history_count": len(session.get("history", [])),
             "latest_entry": session.get("history", [{}])[-1] if session.get("history") else None,
         }

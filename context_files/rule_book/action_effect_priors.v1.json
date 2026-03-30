@@ -1,0 +1,13 @@
+{
+  "schema_version": "action_effect_priors.v1",
+  "priors": {
+    "increase_patch_length": 0.05,
+    "decrease_patch_length": 0.05,
+    "increase_feed_length": 0.01,
+    "increase_substrate_height_and_feed_width": 0.04,
+    "introduce_partial_ground_window": -0.02,
+    "feedline_matching_adjustment": 0.03,
+    "increase_radiating_area": 0.02,
+    "generic_refinement": 0.0
+  }
+}

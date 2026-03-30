@@ -1,0 +1,223 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "action_plan.v1",
+  "title": "Action Plan v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "plan_version",
+    "planner_mode",
+    "command_catalog_version",
+    "session_id",
+    "trace_id",
+    "design_id",
+    "iteration_index",
+    "units",
+    "predicted_dimensions",
+    "predicted_metrics",
+    "actions",
+    "expected_exports",
+    "safety_checks"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "action_plan.v1"
+    },
+    "plan_version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "planner_mode": {
+      "type": "string",
+      "enum": [
+        "fixed",
+        "dynamic"
+      ]
+    },
+    "command_catalog_version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "session_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "trace_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "design_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "iteration_index": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "units": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "geometry",
+        "frequency"
+      ],
+      "properties": {
+        "geometry": {
+          "const": "mm"
+        },
+        "frequency": {
+          "const": "ghz"
+        }
+      }
+    },
+    "predicted_dimensions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "patch_length_mm",
+        "patch_width_mm",
+        "patch_height_mm",
+        "substrate_length_mm",
+        "substrate_width_mm",
+        "substrate_height_mm",
+        "feed_length_mm",
+        "feed_width_mm",
+        "feed_offset_x_mm",
+        "feed_offset_y_mm"
+      ],
+      "properties": {
+        "patch_length_mm": {"type": "number", "exclusiveMinimum": 0.0},
+        "patch_width_mm": {"type": "number", "exclusiveMinimum": 0.0},
+        "patch_height_mm": {"type": "number", "exclusiveMinimum": 0.0},
+        "substrate_length_mm": {"type": "number", "exclusiveMinimum": 0.0},
+        "substrate_width_mm": {"type": "number", "exclusiveMinimum": 0.0},
+        "substrate_height_mm": {"type": "number", "exclusiveMinimum": 0.0},
+        "feed_length_mm": {"type": "number", "exclusiveMinimum": 0.0},
+        "feed_width_mm": {"type": "number", "exclusiveMinimum": 0.0},
+        "feed_offset_x_mm": {"type": "number"},
+        "feed_offset_y_mm": {"type": "number"}
+      }
+    },
+    "predicted_metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "center_frequency_ghz": {"type": "number"},
+        "bandwidth_mhz": {"type": "number"},
+        "gain_dbi": {"type": "number"},
+        "vswr": {"type": "number"}
+      }
+    },
+    "actions": {
+      "type": "array",
+      "minItems": 12,
+      "items": {
+        "$ref": "#/$defs/actionItem"
+      }
+    },
+    "expected_exports": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "enum": [
+          "s_parameters",
+          "farfield",
+          "summary_metrics"
+        ]
+      }
+    },
+    "safety_checks": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "enum": [
+          "dimensions_within_constraints",
+          "command_order_validated",
+          "materials_whitelisted",
+          "client_capability_compatible",
+          "simulation_timeout_bounded"
+        ]
+      }
+    }
+  },
+  "$defs": {
+    "actionItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "seq",
+        "action",
+        "command",
+        "params",
+        "on_failure",
+        "checksum_scope",
+        "rationale_tags",
+        "expected_effects"
+      ],
+      "properties": {
+        "seq": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "action": {
+          "type": "string",
+          "minLength": 1
+        },
+        "command": {
+          "type": "string",
+          "enum": [
+            "create_project",
+            "set_units",
+            "set_frequency_range",
+            "define_material",
+            "create_substrate",
+            "create_ground_plane",
+            "create_patch",
+            "create_feedline",
+            "create_port",
+            "set_boundary",
+            "set_solver",
+            "run_simulation",
+            "export_s_parameters",
+            "export_farfield",
+            "extract_summary_metrics"
+          ]
+        },
+        "params": {
+          "type": "object"
+        },
+        "on_failure": {
+          "type": "string",
+          "enum": [
+            "abort",
+            "retry_once",
+            "continue"
+          ]
+        },
+        "checksum_scope": {
+          "type": "string",
+          "minLength": 1
+        },
+        "rationale_tags": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "expected_effects": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    }
+  }
+}

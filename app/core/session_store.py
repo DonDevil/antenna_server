@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from app.core.policy_runtime import default_policy_runtime_state
 from config import ANN_SETTINGS, API_SETTINGS, SESSIONS_DIR
 
 
@@ -63,6 +64,7 @@ class SessionStore:
             "current_ann_prediction": ann_payload,
             "current_surrogate_validation": surrogate_validation,
             "current_command_package": command_package,
+            "policy_runtime": default_policy_runtime_state(),
             "artifact_manifest": {
                 "manifest_version": "artifact_manifest.v1",
                 "session_id": session_id,
@@ -83,6 +85,9 @@ class SessionStore:
                 "latest_iteration_index": 0,
                 "latest_command_package_checksum_sha256": command_checksum,
                 "latest_surrogate_validation": surrogate_validation,
+                "planner_mode": "fixed",
+                "llm_policy_snapshot": default_policy_runtime_state(),
+                "latest_planning_decision": None,
                 "history": [
                     {
                         "timestamp": now,
@@ -90,6 +95,7 @@ class SessionStore:
                         "decision_reason": decision_reason,
                         "stop_reason": stop_reason,
                         "command_package_checksum_sha256": command_checksum,
+                        "planning_provenance": None,
                     }
                 ],
             },
@@ -101,6 +107,7 @@ class SessionStore:
                     "decision_reason": decision_reason,
                     "stop_reason": stop_reason,
                     "surrogate_validation": surrogate_validation,
+                    "planning_provenance": None,
                     "ann_prediction": ann_payload,
                     "command_package": command_package,
                 }

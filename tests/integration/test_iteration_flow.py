@@ -130,6 +130,9 @@ def test_optimize_feedback_refine_complete_and_query(tmp_path: Path) -> None:
     assert feedback_1_data["iteration_index"] == 1
     assert feedback_1_data["decision_reason"] == "apply_refinement_strategy_due_to_unmet_acceptance"
     assert feedback_1_data["stop_reason"] is None
+    assert isinstance(feedback_1_data["planning_summary"], dict)
+    assert isinstance(feedback_1_data["planning_summary"]["selected_action"], str)
+    assert isinstance(feedback_1_data["planning_summary"]["decision_source"], str)
     assert feedback_1_data["next_command_package"]["iteration_index"] == 1
 
     # Second feedback satisfies acceptance to complete the session.
@@ -158,6 +161,7 @@ def test_optimize_feedback_refine_complete_and_query(tmp_path: Path) -> None:
     assert final_session_data["status"] == "completed"
     assert final_session_data["stop_reason"] == "acceptance_criteria_met"
     assert final_session_data["surrogate_summary"] is not None
+    assert isinstance(final_session_data["policy_runtime"], dict)
     assert final_session_data["current_iteration"] == 1
     assert final_session_data["history_count"] == 4
 
@@ -171,6 +175,7 @@ def test_optimize_feedback_refine_complete_and_query(tmp_path: Path) -> None:
     assert isinstance(manifest["latest_command_package_checksum_sha256"], str)
     assert len(manifest["latest_command_package_checksum_sha256"]) == 64
     assert len(manifest["history"]) == 3
+    assert isinstance(manifest["latest_planning_decision"], dict)
 
     for entry in stored_session["history"]:
         assert "timestamp" in entry

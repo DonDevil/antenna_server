@@ -6,11 +6,14 @@ from typing import Any, cast
 
 from app.ann.predictor import AnnPredictor
 from app.commands.planner import build_command_package
+from app.core.feedback_features import derive_feedback_features
 from app.core.family_registry import apply_family_profile
-from app.core.refinement import evaluate_acceptance, refine_prediction
+from app.core.refinement import evaluate_acceptance, refine_prediction_with_strategy
 from app.core.schemas import AnnPrediction, OptimizeRequest, OptimizeResponse
 from app.core.session_store import SessionStore
 from app.core.surrogate_validator import validate_with_surrogate
+from app.llm.intent_parser import summarize_user_intent
+from app.planning.dynamic_planner import plan_refinement_strategy
 
 
 class CentralBrain:
@@ -43,6 +46,7 @@ class CentralBrain:
         session_id = request.session_id or str(uuid.uuid4())
         trace_id = str(uuid.uuid4())
         normalized_request = apply_family_profile(request)
+        intent_summary = summarize_user_intent(normalized_request.user_request)
 
         ann = self.ann_predictor.predict(normalized_request.target_spec)
         surrogate = validate_with_surrogate(normalized_request, ann)
@@ -127,6 +131,9 @@ class CentralBrain:
             stop_reason=None,
             decision_reason="family_profile_applied_and_surrogate_confidence_sufficient",
         )
+        session = self.session_store.load(session_id)
+        session["intent_summary"] = intent_summary
+        self.session_store.save(session_id, session)
 
         return OptimizeResponse(
             status="accepted",
@@ -146,6 +153,7 @@ class CentralBrain:
         decision_reason: str,
         stop_reason: str | None,
         command_package: dict[str, Any] | None,
+        planning_provenance: dict[str, Any] | None = None,
     ) -> None:
         manifest = session.get("artifact_manifest")
         if not isinstance(manifest, dict):
@@ -172,8 +180,11 @@ class CentralBrain:
                 "decision_reason": decision_reason,
                 "stop_reason": stop_reason,
                 "command_package_checksum_sha256": checksum,
+                "planning_provenance": planning_provenance,
             }
         )
+        if planning_provenance is not None:
+            manifest_typed["latest_planning_decision"] = planning_provenance
 
     def process_feedback(self, payload: dict[str, Any]) -> dict[str, Any]:
         session_id = str(payload["session_id"])
@@ -216,6 +227,7 @@ class CentralBrain:
                 decision_reason="acceptance_criteria_met",
                 stop_reason="acceptance_criteria_met",
                 command_package=session.get("current_command_package"),
+                planning_provenance=None,
             )
             self.session_store.save(session_id, session)
             return {
@@ -241,6 +253,7 @@ class CentralBrain:
                 decision_reason="max_iterations_reached_without_acceptance",
                 stop_reason="max_iterations_reached",
                 command_package=session.get("current_command_package"),
+                planning_provenance=None,
             )
             self.session_store.save(session_id, session)
             return {
@@ -256,7 +269,22 @@ class CentralBrain:
             }
 
         next_iteration = current_iteration + 1
-        refined_ann = refine_prediction(request, current_ann, evaluation, next_iteration_index=next_iteration)
+        features = derive_feedback_features(request, payload, evaluation)
+        refinement_plan = plan_refinement_strategy(
+            session=session,
+            features=features,
+            iteration_index=next_iteration,
+        )
+        strategy = refinement_plan.get("strategy")
+        strategy_typed = strategy if isinstance(strategy, dict) else None
+        refined_ann = refine_prediction_with_strategy(
+            request,
+            current_ann,
+            evaluation,
+            next_iteration_index=next_iteration,
+            strategy=strategy_typed,
+            action_name=str(refinement_plan.get("selected_action", "generic_refinement")),
+        )
         next_command_package = build_command_package(
             request,
             refined_ann,
@@ -277,6 +305,8 @@ class CentralBrain:
                 "iteration_index": next_iteration,
                 "decision_reason": "apply_refinement_strategy_due_to_unmet_acceptance",
                 "stop_reason": None,
+                "feedback_features": features,
+                "planning_provenance": refinement_plan,
                 "ann_prediction": refined_ann.model_dump(mode="json"),
                 "command_package": next_command_package,
             }
@@ -287,6 +317,7 @@ class CentralBrain:
             decision_reason="apply_refinement_strategy_due_to_unmet_acceptance",
             stop_reason=None,
             command_package=next_command_package,
+            planning_provenance=refinement_plan,
         )
         self.session_store.save(session_id, session)
 
@@ -299,6 +330,12 @@ class CentralBrain:
             "decision_reason": "apply_refinement_strategy_due_to_unmet_acceptance",
             "stop_reason": None,
             "evaluation": evaluation,
+            "planning_summary": {
+                "selected_action": refinement_plan.get("selected_action"),
+                "decision_source": refinement_plan.get("decision_source"),
+                "confidence": refinement_plan.get("confidence"),
+                "rule_id": refinement_plan.get("rule_id"),
+            },
             "next_command_package": next_command_package,
             "message": "Generated refined command package for next iteration.",
         }

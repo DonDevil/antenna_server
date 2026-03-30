@@ -2,10 +2,13 @@ from __future__ import annotations
 
 from typing import Any, cast
 
+from app.core.json_contracts import validate_contract
 from app.core.schemas import AnnPrediction, OptimizeRequest
+from app.planning.command_compiler import compile_action_plan
+from config import PLANNER_SETTINGS
 
 
-def build_command_package(
+def build_fixed_action_plan(
     request: OptimizeRequest,
     ann: AnnPrediction,
     session_id: str,
@@ -36,11 +39,30 @@ def build_command_package(
         "feed_offset_y_mm": float(ann_any.dimensions.feed_offset_y_mm),
     }
 
-    commands: list[dict[str, Any]] = [
-        {"seq": 1, "command": "create_project", "params": {"project_name": f"design_{session_id}"}, "on_failure": "abort", "checksum_scope": "all"},
-        {"seq": 2, "command": "set_units", "params": {"geometry": "mm", "frequency": "ghz"}, "on_failure": "abort", "checksum_scope": "all"},
+    actions: list[dict[str, Any]] = [
+        {
+            "seq": 1,
+            "action": "create_project",
+            "command": "create_project",
+            "params": {"project_name": f"design_{session_id}"},
+            "on_failure": "abort",
+            "checksum_scope": "all",
+            "rationale_tags": ["baseline_setup"],
+            "expected_effects": ["project_initialized"],
+        },
+        {
+            "seq": 2,
+            "action": "set_units",
+            "command": "set_units",
+            "params": {"geometry": "mm", "frequency": "ghz"},
+            "on_failure": "abort",
+            "checksum_scope": "all",
+            "rationale_tags": ["baseline_setup"],
+            "expected_effects": ["units_normalized"],
+        },
         {
             "seq": 3,
+            "action": "set_frequency_range",
             "command": "set_frequency_range",
             "params": {
                 "start_ghz": max(0.1, target_frequency - 0.5),
@@ -48,23 +70,32 @@ def build_command_package(
             },
             "on_failure": "abort",
             "checksum_scope": "all",
+            "rationale_tags": ["target_driven"],
+            "expected_effects": ["solver_frequency_window_set"],
         },
         {
             "seq": 4,
+            "action": "define_material",
             "command": "define_material",
             "params": {"name": allowed_material, "kind": "conductor", "conductivity_s_per_m": 5.8e7},
             "on_failure": "abort",
             "checksum_scope": "geometry",
+            "rationale_tags": ["family_constraints"],
+            "expected_effects": ["conductor_material_defined"],
         },
         {
             "seq": 5,
+            "action": "define_material",
             "command": "define_material",
             "params": {"name": allowed_substrate, "kind": "substrate", "epsilon_r": 4.4, "loss_tangent": 0.02},
             "on_failure": "abort",
             "checksum_scope": "geometry",
+            "rationale_tags": ["family_constraints"],
+            "expected_effects": ["substrate_material_defined"],
         },
         {
             "seq": 6,
+            "action": "create_substrate",
             "command": "create_substrate",
             "params": {
                 "name": "substrate",
@@ -76,9 +107,12 @@ def build_command_package(
             },
             "on_failure": "abort",
             "checksum_scope": "geometry",
+            "rationale_tags": ["ann_baseline_geometry"],
+            "expected_effects": ["substrate_created"],
         },
         {
             "seq": 7,
+            "action": "create_ground_plane",
             "command": "create_ground_plane",
             "params": {
                 "name": "ground",
@@ -90,9 +124,12 @@ def build_command_package(
             },
             "on_failure": "abort",
             "checksum_scope": "geometry",
+            "rationale_tags": ["ann_baseline_geometry"],
+            "expected_effects": ["ground_created"],
         },
         {
             "seq": 8,
+            "action": "create_patch",
             "command": "create_patch",
             "params": {
                 "name": "patch",
@@ -104,9 +141,12 @@ def build_command_package(
             },
             "on_failure": "abort",
             "checksum_scope": "geometry",
+            "rationale_tags": ["ann_baseline_geometry"],
+            "expected_effects": ["patch_created"],
         },
         {
             "seq": 9,
+            "action": "create_feedline",
             "command": "create_feedline",
             "params": {
                 "name": "feed",
@@ -123,25 +163,76 @@ def build_command_package(
             },
             "on_failure": "abort",
             "checksum_scope": "geometry",
+            "rationale_tags": ["ann_baseline_geometry"],
+            "expected_effects": ["feedline_created"],
         },
         {
             "seq": 10,
+            "action": "create_port",
             "command": "create_port",
             "params": {"port_id": 1, "port_type": "discrete", "impedance_ohm": 50.0, "reference_mm": {"x": 0.0, "y": 0.0, "z": 0.0}},
             "on_failure": "abort",
             "checksum_scope": "simulation",
+            "rationale_tags": ["baseline_excitation"],
+            "expected_effects": ["port_defined"],
         },
-        {"seq": 11, "command": "set_boundary", "params": {"boundary_type": "open_add_space", "padding_mm": 15.0}, "on_failure": "abort", "checksum_scope": "simulation"},
-        {"seq": 12, "command": "set_solver", "params": {"solver_type": "time_domain", "mesh_cells_per_wavelength": 20}, "on_failure": "abort", "checksum_scope": "simulation"},
-        {"seq": 13, "command": "run_simulation", "params": {"timeout_sec": min(max_sim_timeout, 900)}, "on_failure": "abort", "checksum_scope": "simulation"},
-        {"seq": 14, "command": "export_s_parameters", "params": {"format": export_format, "destination_hint": "s11"}, "on_failure": "continue", "checksum_scope": "exports"},
-        {"seq": 15, "command": "extract_summary_metrics", "params": {"metrics": ["center_frequency_ghz", "bandwidth_mhz", "return_loss_db", "vswr", "gain_dbi"]}, "on_failure": "continue", "checksum_scope": "exports"},
+        {
+            "seq": 11,
+            "action": "set_boundary",
+            "command": "set_boundary",
+            "params": {"boundary_type": "open_add_space", "padding_mm": 15.0},
+            "on_failure": "abort",
+            "checksum_scope": "simulation",
+            "rationale_tags": ["baseline_simulation"],
+            "expected_effects": ["boundary_set"],
+        },
+        {
+            "seq": 12,
+            "action": "set_solver",
+            "command": "set_solver",
+            "params": {"solver_type": "time_domain", "mesh_cells_per_wavelength": 20},
+            "on_failure": "abort",
+            "checksum_scope": "simulation",
+            "rationale_tags": ["baseline_simulation"],
+            "expected_effects": ["solver_ready"],
+        },
+        {
+            "seq": 13,
+            "action": "run_simulation",
+            "command": "run_simulation",
+            "params": {"timeout_sec": min(max_sim_timeout, 900)},
+            "on_failure": "abort",
+            "checksum_scope": "simulation",
+            "rationale_tags": ["baseline_simulation"],
+            "expected_effects": ["simulation_started"],
+        },
+        {
+            "seq": 14,
+            "action": "export_s_parameters",
+            "command": "export_s_parameters",
+            "params": {"format": export_format, "destination_hint": "s11"},
+            "on_failure": "continue",
+            "checksum_scope": "exports",
+            "rationale_tags": ["baseline_exports"],
+            "expected_effects": ["s_parameters_available"],
+        },
+        {
+            "seq": 15,
+            "action": "extract_summary_metrics",
+            "command": "extract_summary_metrics",
+            "params": {"metrics": ["center_frequency_ghz", "bandwidth_mhz", "return_loss_db", "vswr", "gain_dbi"]},
+            "on_failure": "continue",
+            "checksum_scope": "exports",
+            "rationale_tags": ["baseline_exports"],
+            "expected_effects": ["summary_metrics_available"],
+        },
     ]
 
     if supports_farfield:
-        commands.append(
+        actions.append(
             {
                 "seq": 16,
+                "action": "export_farfield",
                 "command": "export_farfield",
                 "params": {
                     "format": export_format,
@@ -150,12 +241,16 @@ def build_command_package(
                 },
                 "on_failure": "continue",
                 "checksum_scope": "exports",
+                "rationale_tags": ["client_capability_export"],
+                "expected_effects": ["farfield_available"],
             }
         )
 
-    return {
-        "schema_version": "cst_command_package.v1",
-        "command_catalog_version": "v1",
+    action_plan = {
+        "schema_version": "action_plan.v1",
+        "plan_version": PLANNER_SETTINGS.action_plan_version,
+        "planner_mode": "fixed",
+        "command_catalog_version": PLANNER_SETTINGS.command_catalog_version,
         "session_id": session_id,
         "trace_id": trace_id,
         "design_id": f"design_{session_id}",
@@ -166,9 +261,8 @@ def build_command_package(
             "center_frequency_ghz": target_frequency,
             "bandwidth_mhz": target_bandwidth,
         },
-        "commands": commands,
-        "expected_exports": ["s_parameters", "summary_metrics"]
-        + (["farfield"] if supports_farfield else []),
+        "actions": actions,
+        "expected_exports": ["s_parameters", "summary_metrics"] + (["farfield"] if supports_farfield else []),
         "safety_checks": [
             "dimensions_within_constraints",
             "command_order_validated",
@@ -177,3 +271,25 @@ def build_command_package(
             "simulation_timeout_bounded",
         ],
     }
+    validate_contract("action_plan", action_plan)
+    return action_plan
+
+
+def build_command_package(
+    request: OptimizeRequest,
+    ann: AnnPrediction,
+    session_id: str,
+    trace_id: str,
+    iteration_index: int = 0,
+) -> dict[str, Any]:
+    if PLANNER_SETTINGS.mode != "fixed" and not PLANNER_SETTINGS.dynamic_enabled:
+        raise ValueError("dynamic planner mode is disabled by configuration")
+
+    action_plan = build_fixed_action_plan(
+        request,
+        ann,
+        session_id=session_id,
+        trace_id=trace_id,
+        iteration_index=iteration_index,
+    )
+    return compile_action_plan(action_plan)

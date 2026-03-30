@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from app.core.schemas import AnnPrediction, DimensionPrediction, OptimizeRequest
+from app.planning.geometry_guardrails import apply_geometry_guardrails
 from config import BOUNDS
 
 
@@ -59,6 +60,24 @@ def evaluate_acceptance(request: OptimizeRequest, feedback: dict[str, Any]) -> d
 
 
 def refine_prediction(request: OptimizeRequest, current: AnnPrediction, evaluation: dict[str, Any], next_iteration_index: int) -> AnnPrediction:
+    return refine_prediction_with_strategy(
+        request,
+        current,
+        evaluation,
+        next_iteration_index=next_iteration_index,
+        strategy=None,
+        action_name="generic_refinement",
+    )
+
+
+def refine_prediction_with_strategy(
+    request: OptimizeRequest,
+    current: AnnPrediction,
+    evaluation: dict[str, Any],
+    next_iteration_index: int,
+    strategy: dict[str, Any] | None,
+    action_name: str = "generic_refinement",
+) -> AnnPrediction:
     d = current.dimensions.model_dump()
 
     freq_error_mhz = float(evaluation["freq_error_mhz"])
@@ -66,27 +85,44 @@ def refine_prediction(request: OptimizeRequest, current: AnnPrediction, evaluati
     vswr_gap = float(evaluation["vswr_gap"])
     gain_gap = float(evaluation["gain_gap"])
 
-    # If frequency is too high, increase patch length. If low, decrease it.
-    if freq_error_mhz > 0:
-        d["patch_length_mm"] *= 1.02
-    elif freq_error_mhz < 0:
-        d["patch_length_mm"] *= 0.98
+    if isinstance(strategy, dict) and strategy:
+        scale = strategy.get("scale", {})
+        offset = strategy.get("offset", {})
+        if isinstance(scale, dict):
+            for key, factor in scale.items():
+                if key in d:
+                    d[key] = float(d[key]) * float(factor)
+        if isinstance(offset, dict):
+            for key, delta in offset.items():
+                if key in d:
+                    d[key] = float(d[key]) + float(delta)
+    else:
+        # If frequency is too high, increase patch length. If low, decrease it.
+        if freq_error_mhz > 0:
+            d["patch_length_mm"] *= 1.02
+        elif freq_error_mhz < 0:
+            d["patch_length_mm"] *= 0.98
 
-    # If bandwidth is below target, increase substrate height and feed width.
-    if bandwidth_gap_mhz > 0:
-        d["substrate_height_mm"] *= 1.05
-        d["feed_width_mm"] *= 1.05
+        # If bandwidth is below target, increase substrate height and feed width.
+        if bandwidth_gap_mhz > 0:
+            d["substrate_height_mm"] *= 1.05
+            d["feed_width_mm"] *= 1.05
 
-    # If VSWR is above threshold, nudge feed geometry.
-    if vswr_gap > 0:
-        d["feed_width_mm"] *= 1.03
-        d["feed_offset_y_mm"] *= 0.95
+        # If VSWR is above threshold, nudge feed geometry.
+        if vswr_gap > 0:
+            d["feed_width_mm"] *= 1.03
+            d["feed_offset_y_mm"] *= 0.95
 
-    # If gain is below threshold, increase patch width and substrate size.
-    if gain_gap > 0:
-        d["patch_width_mm"] *= 1.02
-        d["substrate_length_mm"] *= 1.02
-        d["substrate_width_mm"] *= 1.02
+        # If gain is below threshold, increase patch width and substrate size.
+        if gain_gap > 0:
+            d["patch_width_mm"] *= 1.02
+            d["substrate_length_mm"] *= 1.02
+            d["substrate_width_mm"] *= 1.02
+
+    # Hard geometry guardrail: clamp each dimension to the max allowed
+    # absolute delta for the selected action before executing.
+    original_d = current.dimensions.model_dump()
+    d, _clamped = apply_geometry_guardrails(original_d, d, action_name)
 
     # Clamp with request constraints when available, otherwise global defaults.
     d["patch_length_mm"] = _clamp(d["patch_length_mm"], *_constraint_range(request, "patch_length_mm", BOUNDS.patch_length_mm))

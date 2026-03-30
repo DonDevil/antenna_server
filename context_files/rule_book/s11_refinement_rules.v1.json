@@ -1,0 +1,140 @@
+{
+  "schema_version": "s11_refinement_rules.v1",
+  "rules": [
+    {
+      "id": "freq.too_high",
+      "when": {
+        "all_of": [
+          {"feature": "freq_error_mhz", "op": ">", "value": 20.0}
+        ]
+      },
+      "candidates": [
+        {
+          "action": "increase_patch_length",
+          "base_score": 0.72,
+          "rationale": "Measured resonance is above target; increase electrical length.",
+          "strategy": {
+            "scale": {
+              "patch_length_mm": 1.02
+            },
+            "offset": {}
+          }
+        },
+        {
+          "action": "increase_feed_length",
+          "base_score": 0.56,
+          "rationale": "Secondary option to lower resonance using feed influence.",
+          "strategy": {
+            "scale": {
+              "feed_length_mm": 1.015
+            },
+            "offset": {}
+          }
+        }
+      ]
+    },
+    {
+      "id": "freq.too_low",
+      "when": {
+        "all_of": [
+          {"feature": "freq_error_mhz", "op": "<", "value": -20.0}
+        ]
+      },
+      "candidates": [
+        {
+          "action": "decrease_patch_length",
+          "base_score": 0.72,
+          "rationale": "Measured resonance is below target; reduce electrical length.",
+          "strategy": {
+            "scale": {
+              "patch_length_mm": 0.98
+            },
+            "offset": {}
+          }
+        }
+      ]
+    },
+    {
+      "id": "bandwidth.shortfall",
+      "when": {
+        "all_of": [
+          {"feature": "bandwidth_gap_mhz", "op": ">", "value": 10.0}
+        ]
+      },
+      "candidates": [
+        {
+          "action": "increase_substrate_height_and_feed_width",
+          "base_score": 0.7,
+          "rationale": "Bandwidth below target; widen and thicken matching path.",
+          "strategy": {
+            "scale": {
+              "substrate_height_mm": 1.05,
+              "feed_width_mm": 1.05
+            },
+            "offset": {}
+          }
+        },
+        {
+          "action": "introduce_partial_ground_window",
+          "base_score": 0.63,
+          "rationale": "Rule-book option for stronger bandwidth expansion when needed.",
+          "strategy": {
+            "scale": {
+              "substrate_height_mm": 1.03,
+              "feed_width_mm": 1.02
+            },
+            "offset": {
+              "feed_offset_y_mm": -0.2
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "matching.poor",
+      "when": {
+        "all_of": [
+          {"feature": "vswr_excess", "op": ">", "value": 0.15}
+        ]
+      },
+      "candidates": [
+        {
+          "action": "feedline_matching_adjustment",
+          "base_score": 0.74,
+          "rationale": "VSWR out of range; nudge feed geometry for impedance matching.",
+          "strategy": {
+            "scale": {
+              "feed_width_mm": 1.03
+            },
+            "offset": {
+              "feed_offset_y_mm": -0.25
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "gain.low",
+      "when": {
+        "all_of": [
+          {"feature": "gain_deficit", "op": ">", "value": 0.5}
+        ]
+      },
+      "candidates": [
+        {
+          "action": "increase_radiating_area",
+          "base_score": 0.65,
+          "rationale": "Gain below threshold; increase effective radiating area.",
+          "strategy": {
+            "scale": {
+              "patch_width_mm": 1.02,
+              "substrate_width_mm": 1.02,
+              "substrate_length_mm": 1.02
+            },
+            "offset": {}
+          }
+        }
+      ]
+    }
+  ]
+}

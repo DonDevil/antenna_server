@@ -137,3 +137,205 @@ Based on the previous project, the new repository should not commit:
 - large model checkpoints unless explicitly managed with Git LFS
 
 This policy is enforced by the repository `.gitignore`.
+
+## Next Implementation Plan: Dynamic Action Planner With Rule Book
+
+This section defines the next execution plan for adding a robust CST automation strategy that combines:
+
+- user intent parsing via Ollama `deepseek-r1:8b`
+- ANN-based inverse prediction as baseline geometry
+- deterministic command/action execution from a strict catalog
+- rule-book-guided refinement after simulation feedback
+
+### Architecture Goal
+
+Do not generate raw VBA dynamically from LLM output.
+
+Instead:
+
+1. LLM selects from whitelisted actions only.
+2. Deterministic server code validates action parameters and ordering.
+3. Client-side CST adapter converts validated actions into stable template-based VBA.
+
+This preserves flexibility while minimizing CST fragility.
+
+## Proposed File Structure Changes
+
+Add the following modules while keeping current behavior as fallback:
+
+```text
+app/
+  llm/
+	 ollama_client.py                # low-level Ollama calls, retries, timeouts
+	 intent_parser.py                # prompt -> structured intent extraction
+	 action_ranker.py                # feedback signature -> ranked candidate actions
+	 session_context_builder.py      # compact context for LLM calls
+  planning/
+	 action_catalog.py               # typed action registry + validation helpers
+	 action_rules.py                 # deterministic rule-book loader and scorer
+	 dynamic_planner.py              # build/validate ordered action plan
+	 command_compiler.py             # action plan -> command_package entries
+  core/
+	 feedback_features.py            # derive error signature from CST feedback
+	 policy_runtime.py               # call-budget and policy decisions for LLM usage
+context_files/
+  rule_book/
+	 s11_refinement_rules.v1.yaml    # detailed engineering rules by failure pattern
+	 action_effect_priors.v1.yaml    # expected directionality and confidence priors
+schemas/
+  planning/
+	 action_plan.v1.json             # strict schema for planner output
+	 action_catalog.v1.json          # schema for action catalog definition
+```
+
+Keep existing `app/commands/planner.py` as `fixed` planner mode until dynamic mode is proven stable.
+
+## Phase Plan
+
+### Phase 1: Contracts and Catalog Foundations
+
+1. Add `action_catalog.v1` with action definitions, parameter types, bounds, units, prerequisites, and incompatibilities.
+2. Add `action_plan.v1` schema with ordered actions, rationale tags, and expected effect metadata.
+3. Add command compiler that maps actions to existing high-level command package structure.
+4. Introduce planner mode flag in runtime config:
+	- `fixed` (default)
+	- `dynamic` (feature-gated)
+
+Exit criteria:
+
+- Dynamic plan can be validated and compiled without any LLM call.
+- Existing integration tests remain green in `fixed` mode.
+
+### Phase 2: Rule Book and Deterministic Scoring
+
+1. Implement rule book file format (`s11_refinement_rules.v1.yaml`) with:
+	- trigger conditions over feedback features
+	- ranked candidate actions
+	- parameter update formulas
+	- guardrails and hard-block constraints
+2. Add feature extraction from feedback (`feedback_features.py`):
+	- center-frequency error
+	- bandwidth shortfall
+	- S11 dip depth/shape proxies
+	- VSWR and gain failures
+3. Add deterministic scorer that produces top-k candidate actions with confidence.
+
+Exit criteria:
+
+- Given feedback, server produces reproducible ranked actions with no LLM.
+- Rule evaluation is logged with `decision_reason` and per-rule provenance.
+
+### Phase 3: DeepSeek Intent and Action Selection (Constrained)
+
+1. Add `intent_parser.py` for user request normalization and clarification prompts.
+2. Add `action_ranker.py` that consumes compact context + rule candidates and returns ranked choice from catalog only.
+3. Enforce strict output schema validation and fallback:
+	- if invalid LLM output, fallback to deterministic top-ranked rule action
+4. Add policy switches:
+	- `llm_enabled_for_intent`
+	- `llm_enabled_for_refinement`
+
+Exit criteria:
+
+- LLM never emits VBA.
+- LLM cannot introduce unknown actions.
+- Invalid LLM output cannot break planning pipeline.
+
+### Phase 4: Session Context and Resource Optimization
+
+1. Add compact session memory snapshots for LLM use:
+	- original intent summary
+	- latest target and constraints
+	- last N iteration outcomes (small N, e.g., 2 or 3)
+	- current rule-book candidate shortlist
+2. Add context builder that creates short prompt context from session state instead of full history.
+3. Add call budget controls per session:
+	- max LLM calls per optimize request
+	- max LLM calls per refinement loop
+	- timeout and token/output limits
+4. Add invocation policy to run DeepSeek only at key points:
+	- initial intent parse
+	- refinement decision only when deterministic confidence is below threshold
+
+Exit criteria:
+
+- Average LLM calls per session is bounded and observable.
+- ANN and planner continue to run when LLM is unavailable.
+
+### Phase 5: Observability, Replay, and Safety Hardening
+
+1. Persist planner provenance in session manifest:
+	- planner mode (`fixed` or `dynamic`)
+	- rule ids considered
+	- LLM used or bypassed
+	- action selection confidence and fallback reason
+2. Extend replay script to reconstruct action selection timeline.
+3. Add safety checks for every action plan:
+	- precondition failures
+	- geometry sanity bounds
+	- prohibited sequence patterns
+4. Add integration tests for failure paths:
+	- malformed LLM output
+	- out-of-budget call behavior
+	- deterministic fallback correctness
+
+Exit criteria:
+
+- Replay can explain exactly why each refinement action was selected.
+- Safety gate blocks invalid action plans before CST client execution.
+
+### Phase 6: Data Collection and Optional Custom Policy Model
+
+1. Log per-iteration tuples for learning:
+	- feedback signature
+	- candidates proposed
+	- action chosen
+	- post-action improvement metrics
+2. Train an offline lightweight action policy model (for example, gradient boosting).
+3. Introduce optional `policy_model` ranker in front of LLM for cheaper inference.
+4. Use DeepSeek as fallback/tie-breaker, not primary path, once model quality is sufficient.
+
+Exit criteria:
+
+- Measured reduction in LLM usage and latency without quality regression.
+
+## Runtime Resource Policy (DeepSeek-R1:8b + ANN)
+
+Use the following serving policy to minimize resource waste:
+
+1. Keep ANN loaded in-process (small, frequent calls).
+2. Use DeepSeek only for:
+	- initial intent parsing
+	- low-confidence refinement decisions
+3. Cache session-level LLM outputs:
+	- parsed intent
+	- clarified constraints
+	- last accepted action rationale
+4. Build short prompts from structured context only; do not pass full transcript/history.
+5. Apply strict latency guardrails:
+	- per-call timeout
+	- bounded output tokens
+	- deterministic fallback on timeout
+6. Do not call LLM if deterministic rule confidence exceeds threshold.
+7. Track metrics:
+	- LLM calls/session
+	- timeout rate
+	- fallback rate
+	- median optimize latency
+
+This keeps DeepSeek available where it adds value while ensuring the pipeline remains deterministic and operational under load or model unavailability.
+
+## Implementation Status Update
+
+The following phases are now implemented in code with deterministic fallback enabled by default:
+
+- Phase 2: Rule-book scoring and feedback feature extraction.
+- Phase 3: Constrained LLM action ranking modules (action selection only, no VBA generation).
+- Phase 4: Session context compaction and runtime call-budget policy for LLM usage.
+- Phase 5: Planning provenance persisted into session manifest and replay output.
+
+Current runtime mode remains conservative:
+
+- Fixed command planner remains active by default.
+- Rule-based refinement runs in the feedback loop.
+- LLM refinement calls are policy-gated and disabled by default unless explicitly enabled in planner settings.

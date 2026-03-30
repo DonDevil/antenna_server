@@ -1,0 +1,41 @@
+curl -s -X POST http://localhost:8000/api/v1/optimize \
+  -H "Content-Type: application/json" \
+  -d '{
+    "schema_version": "optimize_request.v1",
+    "user_request": "Design a 2.4 GHz antenna with 80 MHz bandwidth",
+    "target_spec": {
+      "frequency_ghz": 2.4,
+      "bandwidth_mhz": 80,
+      "antenna_family": "microstrip_patch"
+    },
+    "design_constraints": {
+      "allowed_materials": ["Copper (annealed)"],
+      "allowed_substrates": ["Rogers RT/duroid 5880"]
+    },
+    "optimization_policy": {
+      "mode": "auto_iterate",
+      "max_iterations": 5,
+      "stop_on_first_valid": true,
+      "acceptance": {
+        "center_tolerance_mhz": 20.0,
+        "minimum_bandwidth_mhz": 10.0,
+        "maximum_vswr": 2.0,
+        "minimum_gain_dbi": 0.0
+      },
+      "fallback_behavior": "best_effort"
+    },
+    "runtime_preferences": {
+      "require_explanations": false,
+      "persist_artifacts": true,
+      "llm_temperature": 0.0,
+      "timeout_budget_sec": 300,
+      "priority": "normal"
+    },
+    "client_capabilities": {
+      "supports_farfield_export": true,
+      "supports_current_distribution_export": false,
+      "supports_parameter_sweep": false,
+      "max_simulation_timeout_sec": 600,
+      "export_formats": ["json"]
+    }
+  }' | python3 -m json.tool
