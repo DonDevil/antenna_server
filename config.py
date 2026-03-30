@@ -26,7 +26,7 @@ class ApiSettings:
 class OllamaSettings:
     base_url: str = "http://localhost:11434"
     model_name: str = "deepseek-r1:8b"
-    timeout_sec: int = 45
+    timeout_sec: int = 90
 
 
 @dataclass(frozen=True)
