@@ -1,0 +1,704 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Antenna Pipeline Client</title>
+  <style>
+    :root {
+      --bg-0: #0a1018;
+      --bg-1: #111d2d;
+      --panel: rgba(14, 24, 38, 0.88);
+      --line: #2f4360;
+      --text: #e8eef7;
+      --muted: #9bb0c9;
+      --brand: #41c3ff;
+      --brand-2: #7ef29a;
+      --warn: #ffc857;
+      --err: #ff6b6b;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: radial-gradient(circle at 10% -10%, #1d3f66 0%, transparent 35%),
+                  radial-gradient(circle at 80% 120%, #1f4e3b 0%, transparent 40%),
+                  linear-gradient(160deg, var(--bg-0) 0%, var(--bg-1) 100%);
+      color: var(--text);
+      font-family: "Segoe UI", Tahoma, sans-serif;
+      display: grid;
+      grid-template-rows: auto 1fr;
+      gap: 14px;
+      padding: 14px;
+    }
+
+    .top {
+      display: grid;
+      grid-template-columns: 1fr auto auto;
+      gap: 10px;
+      align-items: center;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 12px;
+    }
+
+    .top input {
+      width: 100%;
+      padding: 10px 12px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #0e1724;
+      color: var(--text);
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 1.2fr 1fr;
+      gap: 14px;
+      min-height: 0;
+    }
+
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 12px;
+      min-height: 0;
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+      gap: 10px;
+    }
+
+    .title {
+      font-weight: 700;
+      letter-spacing: 0.3px;
+    }
+
+    .muted {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    #chatLog {
+      overflow: auto;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 10px;
+      background: #0b1522;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .bubble {
+      max-width: 90%;
+      border-radius: 10px;
+      padding: 8px 10px;
+      line-height: 1.4;
+      font-size: 14px;
+      white-space: pre-wrap;
+    }
+
+    .you {
+      align-self: flex-end;
+      background: #13355a;
+      border: 1px solid #1f4f84;
+    }
+
+    .bot {
+      align-self: flex-start;
+      background: #123024;
+      border: 1px solid #1f5a45;
+    }
+
+    .row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 8px;
+    }
+
+    .row input {
+      width: 100%;
+      padding: 10px 12px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #0e1724;
+      color: var(--text);
+    }
+
+    button {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #133049;
+      color: var(--text);
+      padding: 10px 12px;
+      cursor: pointer;
+      font-weight: 600;
+    }
+
+    button:hover {
+      filter: brightness(1.1);
+    }
+
+    button.primary {
+      background: linear-gradient(140deg, #1265a1, #1f8dc9);
+      border-color: #3999ca;
+    }
+
+    button.good {
+      background: linear-gradient(140deg, #137245, #1b985c);
+      border-color: #34b57b;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .field {
+      display: grid;
+      gap: 6px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .field input {
+      width: 100%;
+      padding: 8px 10px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #0e1724;
+      color: var(--text);
+    }
+
+    pre {
+      margin: 0;
+      overflow: auto;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 10px;
+      background: #0b1522;
+      font-size: 12px;
+      color: #cee3ff;
+    }
+
+    .status-line {
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    .ok { color: var(--brand-2); }
+    .warn { color: var(--warn); }
+    .err { color: var(--err); }
+
+    @media (max-width: 1100px) {
+      .layout {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="top">
+    <input id="apiBase" value="http://127.0.0.1:8000" />
+    <button id="healthBtn">Health Check</button>
+    <div id="healthText" class="status-line">API not checked</div>
+  </div>
+
+  <div class="layout">
+    <section class="panel">
+      <div>
+        <div class="title">Requirement Chat</div>
+        <div class="muted">Describe what you need. The assistant extracts frequency, bandwidth, and family.</div>
+      </div>
+
+      <div id="chatLog"></div>
+
+      <div>
+        <div class="row">
+          <input id="chatInput" placeholder="Example: I need an AMC patch around 2.45 GHz with 80 MHz bandwidth" />
+          <button id="sendBtn">Send</button>
+        </div>
+        <div style="display:flex; gap:8px; margin-top:8px; flex-wrap:wrap;">
+          <button id="startBtn" class="primary">Start Pipeline</button>
+          <button id="resetBtn">Reset Chat</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div>
+        <div class="title">Pipeline Output</div>
+        <div class="muted">Optimize response, live session state, and optional CST feedback trigger.</div>
+      </div>
+
+      <div style="display:grid; gap:10px; min-height:0; overflow:auto;">
+        <div class="status-line" id="pipelineStatus">No session started</div>
+
+        <div class="grid">
+          <label class="field">Frequency (GHz)
+            <input id="freqInput" type="number" step="0.001" placeholder="2.45" />
+          </label>
+          <label class="field">Bandwidth (MHz)
+            <input id="bwInput" type="number" step="0.1" placeholder="80" />
+          </label>
+          <label class="field">Antenna Family
+            <input id="familyInput" value="amc_patch" />
+          </label>
+          <label class="field">Priority
+            <input id="priorityInput" value="normal" />
+          </label>
+        </div>
+
+        <details open>
+          <summary>Optimize Response</summary>
+          <pre id="optOut">{}</pre>
+        </details>
+
+        <details open>
+          <summary>Session State</summary>
+          <pre id="sessOut">{}</pre>
+        </details>
+
+        <div>
+          <button id="capBtn">Load Capabilities</button>
+          <pre id="capOut" style="margin-top:8px;">{}</pre>
+        </div>
+
+        <div>
+          <div class="title" style="font-size:14px; margin-bottom:6px;">Send CST Feedback (optional)</div>
+          <div class="grid">
+            <label class="field">Center Freq (GHz)
+              <input id="fbFreq" type="number" step="0.001" placeholder="2.451" />
+            </label>
+            <label class="field">Bandwidth (MHz)
+              <input id="fbBw" type="number" step="0.1" placeholder="90" />
+            </label>
+            <label class="field">VSWR
+              <input id="fbVswr" type="number" step="0.01" placeholder="1.4" />
+            </label>
+            <label class="field">Gain (dBi)
+              <input id="fbGain" type="number" step="0.1" placeholder="5.8" />
+            </label>
+          </div>
+          <button id="sendFeedbackBtn" class="good" style="margin-top:8px;">Submit Feedback</button>
+        </div>
+      </div>
+
+      <div class="muted">For remote hosting, set API base to your Ubuntu server URL, e.g. http://10.0.0.12:8000</div>
+    </section>
+  </div>
+
+  <script>
+    const state = {
+      messages: [],
+      requirements: {
+        frequency_ghz: null,
+        bandwidth_mhz: null,
+        antenna_family: null,
+      },
+      optimizeResponse: null,
+      sessionId: null,
+      traceId: null,
+      designId: null,
+      iterationIndex: 0,
+      pollTimer: null,
+    };
+
+    const chatLog = document.getElementById("chatLog");
+    const chatInput = document.getElementById("chatInput");
+    const sendBtn = document.getElementById("sendBtn");
+    const startBtn = document.getElementById("startBtn");
+    const resetBtn = document.getElementById("resetBtn");
+    const apiBaseInput = document.getElementById("apiBase");
+    const healthBtn = document.getElementById("healthBtn");
+    const healthText = document.getElementById("healthText");
+
+    const freqInput = document.getElementById("freqInput");
+    const bwInput = document.getElementById("bwInput");
+    const familyInput = document.getElementById("familyInput");
+    const priorityInput = document.getElementById("priorityInput");
+    const pipelineStatus = document.getElementById("pipelineStatus");
+    const optOut = document.getElementById("optOut");
+    const sessOut = document.getElementById("sessOut");
+
+    const fbFreq = document.getElementById("fbFreq");
+    const fbBw = document.getElementById("fbBw");
+    const fbVswr = document.getElementById("fbVswr");
+    const fbGain = document.getElementById("fbGain");
+    const sendFeedbackBtn = document.getElementById("sendFeedbackBtn");
+    const capBtn = document.getElementById("capBtn");
+    const capOut = document.getElementById("capOut");
+
+    function api(path) {
+      return `${apiBaseInput.value.replace(/\/$/, "")}${path}`;
+    }
+
+    function addBubble(text, who = "bot") {
+      const d = document.createElement("div");
+      d.className = `bubble ${who}`;
+      d.textContent = text;
+      chatLog.appendChild(d);
+      chatLog.scrollTop = chatLog.scrollHeight;
+    }
+
+    function parseRequirements(text) {
+      const low = text.toLowerCase();
+      const freq = low.match(/(\d+(?:\.\d+)?)\s*ghz/i);
+      const bw = low.match(/(\d+(?:\.\d+)?)\s*mhz/i);
+
+      if (freq) state.requirements.frequency_ghz = Number(freq[1]);
+      if (bw) state.requirements.bandwidth_mhz = Number(bw[1]);
+
+      if (low.includes("rectangular patch") || low.includes("microstrip")) {
+        state.requirements.antenna_family = "microstrip_patch";
+      } else if (low.includes("wban")) {
+        state.requirements.antenna_family = "wban_patch";
+      } else if (low.includes("amc")) {
+        state.requirements.antenna_family = "amc_patch";
+      }
+
+      freqInput.value = state.requirements.frequency_ghz ?? "";
+      bwInput.value = state.requirements.bandwidth_mhz ?? "";
+      familyInput.value = state.requirements.antenna_family;
+    }
+
+    function applyIntentSummary(summary) {
+      if (!summary || typeof summary !== "object") return;
+      if (summary.parsed_frequency_ghz !== null && summary.parsed_frequency_ghz !== undefined) {
+        state.requirements.frequency_ghz = Number(summary.parsed_frequency_ghz);
+      }
+      if (summary.parsed_bandwidth_mhz !== null && summary.parsed_bandwidth_mhz !== undefined) {
+        state.requirements.bandwidth_mhz = Number(summary.parsed_bandwidth_mhz);
+      }
+      if (summary.parsed_antenna_family && typeof summary.parsed_antenna_family === "string") {
+        state.requirements.antenna_family = summary.parsed_antenna_family;
+      }
+      freqInput.value = state.requirements.frequency_ghz ?? "";
+      bwInput.value = state.requirements.bandwidth_mhz ?? "";
+      familyInput.value = state.requirements.antenna_family;
+    }
+
+    async function parseIntentOnServer(text) {
+      try {
+        const res = await fetch(api("/api/v1/intent/parse"), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ user_request: text }),
+        });
+        const data = await res.json();
+        if (!res.ok) return null;
+        return data.intent_summary || null;
+      } catch (_) {
+        return null;
+      }
+    }
+
+    async function chatOnServer(text) {
+      try {
+        const res = await fetch(api("/api/v1/chat"), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            message: text,
+            requirements: {
+              frequency_ghz: state.requirements.frequency_ghz,
+              bandwidth_mhz: state.requirements.bandwidth_mhz,
+              antenna_family: state.requirements.antenna_family,
+            },
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) return null;
+        return data;
+      } catch (_) {
+        return null;
+      }
+    }
+
+    function requirementPrompt() {
+      const missing = [];
+      if (!state.requirements.frequency_ghz) missing.push("target frequency (GHz)");
+      if (!state.requirements.bandwidth_mhz) missing.push("target bandwidth (MHz)");
+      if (!state.requirements.antenna_family) missing.push("antenna family");
+
+      if (missing.length === 0) {
+        return `Captured requirements:\n- Frequency: ${state.requirements.frequency_ghz} GHz\n- Bandwidth: ${state.requirements.bandwidth_mhz} MHz\n- Family: ${state.requirements.antenna_family}\n\nClick Start Pipeline.`;
+      }
+      return `I still need: ${missing.join(", ")}.\nExample: 2.45 GHz, 80 MHz, AMC patch.`;
+    }
+
+    function renderJson(el, data) {
+      el.textContent = JSON.stringify(data ?? {}, null, 2);
+    }
+
+    async function checkHealth() {
+      healthText.textContent = "Checking...";
+      try {
+        const res = await fetch(api("/api/v1/health"));
+        const data = await res.json();
+        if (!res.ok) throw new Error(JSON.stringify(data));
+        healthText.innerHTML = `<span class="ok">Healthy</span> | ANN ready: ${String(data.ann_model_ready)}`;
+      } catch (err) {
+        healthText.innerHTML = `<span class="err">Health check failed</span>`;
+      }
+    }
+
+    async function loadCapabilities() {
+      try {
+        const res = await fetch(api("/api/v1/capabilities"));
+        const data = await res.json();
+        renderJson(capOut, data);
+        if (!res.ok) {
+          addBubble(`Could not load capabilities: ${JSON.stringify(data)}`, "bot");
+        }
+      } catch (err) {
+        addBubble(`Could not load capabilities: ${String(err.message || err)}`, "bot");
+      }
+    }
+
+    function buildOptimizePayload() {
+      const frequency = Number(freqInput.value || state.requirements.frequency_ghz);
+      const bandwidth = Number(bwInput.value || state.requirements.bandwidth_mhz);
+      const family = (familyInput.value || state.requirements.antenna_family || "amc_patch").trim();
+      const priority = (priorityInput.value || "normal").trim();
+
+      if (!frequency || !bandwidth || !family) {
+        throw new Error("Missing required inputs: frequency, bandwidth, or family.");
+      }
+
+      const userRequest = state.messages
+        .map((m) => `${m.role}: ${m.text}`)
+        .join("\n") || `Design ${family} at ${frequency} GHz and ${bandwidth} MHz bandwidth.`;
+
+      return {
+        schema_version: "optimize_request.v1",
+        user_request: userRequest,
+        target_spec: {
+          frequency_ghz: frequency,
+          bandwidth_mhz: bandwidth,
+          antenna_family: family,
+        },
+        design_constraints: {
+          allowed_materials: ["Copper (annealed)"],
+          allowed_substrates: ["FR-4 (lossy)"],
+        },
+        optimization_policy: {
+          mode: "auto_iterate",
+          max_iterations: 3,
+          stop_on_first_valid: true,
+          acceptance: {
+            center_tolerance_mhz: 20.0,
+            minimum_bandwidth_mhz: bandwidth,
+            maximum_vswr: 2.0,
+            minimum_gain_dbi: 5.0,
+          },
+          fallback_behavior: "best_effort",
+        },
+        runtime_preferences: {
+          require_explanations: false,
+          persist_artifacts: true,
+          llm_temperature: 0.0,
+          timeout_budget_sec: 300,
+          priority,
+        },
+        client_capabilities: {
+          supports_farfield_export: true,
+          supports_current_distribution_export: false,
+          supports_parameter_sweep: false,
+          max_simulation_timeout_sec: 600,
+          export_formats: ["json"],
+        },
+      };
+    }
+
+    async function startPipeline() {
+      try {
+        const payload = buildOptimizePayload();
+        pipelineStatus.textContent = "Starting optimization...";
+
+        const res = await fetch(api("/api/v1/optimize"), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        const data = await res.json();
+        renderJson(optOut, data);
+
+        if (!res.ok) {
+          pipelineStatus.innerHTML = `<span class="err">Optimize failed</span>`;
+          addBubble(`Pipeline start failed:\n${JSON.stringify(data, null, 2)}`, "bot");
+          return;
+        }
+
+        state.optimizeResponse = data;
+        state.sessionId = data.session_id;
+        state.traceId = data.trace_id;
+        state.designId = data.command_package?.design_id || null;
+        state.iterationIndex = Number(data.command_package?.iteration_index ?? 0);
+
+        pipelineStatus.innerHTML = `<span class="ok">Pipeline started</span> | session: ${state.sessionId}`;
+        addBubble("Pipeline started. I will keep updating session status.", "bot");
+
+        startPollingSession();
+      } catch (err) {
+        pipelineStatus.innerHTML = `<span class="err">${String(err.message || err)}</span>`;
+      }
+    }
+
+    async function pollSessionOnce() {
+      if (!state.sessionId) return;
+      try {
+        const res = await fetch(api(`/api/v1/sessions/${state.sessionId}`));
+        const data = await res.json();
+        renderJson(sessOut, data);
+
+        const status = data.status || "unknown";
+        const iter = data.current_iteration ?? "?";
+        const reason = data.stop_reason || "running";
+        pipelineStatus.textContent = `Session status: ${status} | iteration: ${iter} | reason: ${reason}`;
+      } catch (_) {
+        pipelineStatus.innerHTML = `<span class="warn">Session polling failed</span>`;
+      }
+    }
+
+    function startPollingSession() {
+      if (state.pollTimer) clearInterval(state.pollTimer);
+      pollSessionOnce();
+      state.pollTimer = setInterval(pollSessionOnce, 3000);
+    }
+
+    async function submitFeedback() {
+      if (!state.sessionId || !state.traceId || !state.designId) {
+        addBubble("Start pipeline first. Feedback needs session_id, trace_id, and design_id.", "bot");
+        return;
+      }
+
+      const f = Number(fbFreq.value);
+      const b = Number(fbBw.value);
+      const v = Number(fbVswr.value);
+      const g = Number(fbGain.value);
+      if (!f || !b || !v || !g) {
+        addBubble("Feedback needs all four numbers: center freq, bandwidth, VSWR, gain.", "bot");
+        return;
+      }
+
+      const payload = {
+        schema_version: "client_feedback.v1",
+        session_id: state.sessionId,
+        trace_id: state.traceId,
+        design_id: state.designId,
+        iteration_index: state.iterationIndex,
+        simulation_status: "completed",
+        actual_center_frequency_ghz: f,
+        actual_bandwidth_mhz: b,
+        actual_return_loss_db: -18.0,
+        actual_vswr: v,
+        actual_gain_dbi: g,
+        artifacts: {
+          s11_trace_ref: `s11_iter${state.iterationIndex}.json`,
+          summary_metrics_ref: `summary_iter${state.iterationIndex}.json`,
+          farfield_ref: null,
+          current_distribution_ref: null,
+        },
+      };
+
+      const res = await fetch(api("/api/v1/client-feedback"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      renderJson(optOut, data);
+
+      if (!res.ok) {
+        addBubble(`Feedback failed:\n${JSON.stringify(data, null, 2)}`, "bot");
+        return;
+      }
+
+      const nextIter = Number(data.iteration_index ?? state.iterationIndex);
+      state.iterationIndex = nextIter;
+      if (data.next_command_package?.iteration_index !== undefined) {
+        state.iterationIndex = Number(data.next_command_package.iteration_index);
+      }
+
+      addBubble(`Feedback accepted. Status: ${data.status}.`, "bot");
+      pollSessionOnce();
+    }
+
+    function resetChat() {
+      state.messages = [];
+      state.requirements = { frequency_ghz: null, bandwidth_mhz: null, antenna_family: null };
+      state.optimizeResponse = null;
+      state.sessionId = null;
+      state.traceId = null;
+      state.designId = null;
+      state.iterationIndex = 0;
+      chatLog.innerHTML = "";
+      renderJson(optOut, {});
+      renderJson(sessOut, {});
+      pipelineStatus.textContent = "No session started";
+      freqInput.value = "";
+      bwInput.value = "";
+      familyInput.value = "";
+      if (state.pollTimer) clearInterval(state.pollTimer);
+      state.pollTimer = null;
+      addBubble("Hi. Tell me your antenna requirement and I will extract specs.", "bot");
+    }
+
+    async function sendMessage() {
+      const text = chatInput.value.trim();
+      if (!text) return;
+      chatInput.value = "";
+      state.messages.push({ role: "user", text });
+      addBubble(text, "you");
+      parseRequirements(text);
+      const chatResult = await chatOnServer(text);
+      if (chatResult && chatResult.intent_summary) {
+        applyIntentSummary(chatResult.intent_summary);
+      } else {
+        const summary = await parseIntentOnServer(text);
+        applyIntentSummary(summary);
+      }
+      if (chatResult && chatResult.requirements && typeof chatResult.requirements === "object") {
+        if (chatResult.requirements.frequency_ghz !== null && chatResult.requirements.frequency_ghz !== undefined) {
+          state.requirements.frequency_ghz = Number(chatResult.requirements.frequency_ghz);
+        }
+        if (chatResult.requirements.bandwidth_mhz !== null && chatResult.requirements.bandwidth_mhz !== undefined) {
+          state.requirements.bandwidth_mhz = Number(chatResult.requirements.bandwidth_mhz);
+        }
+        if (chatResult.requirements.antenna_family) {
+          state.requirements.antenna_family = String(chatResult.requirements.antenna_family);
+        }
+        freqInput.value = state.requirements.frequency_ghz ?? "";
+        bwInput.value = state.requirements.bandwidth_mhz ?? "";
+        familyInput.value = state.requirements.antenna_family;
+      }
+
+      if (chatResult && chatResult.assistant_message) {
+        addBubble(chatResult.assistant_message, "bot");
+      } else {
+        addBubble(requirementPrompt(), "bot");
+      }
+    }
+
+    sendBtn.addEventListener("click", sendMessage);
+    chatInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") sendMessage();
+    });
+    startBtn.addEventListener("click", startPipeline);
+    resetBtn.addEventListener("click", resetChat);
+    healthBtn.addEventListener("click", checkHealth);
+    capBtn.addEventListener("click", loadCapabilities);
+    sendFeedbackBtn.addEventListener("click", submitFeedback);
+
+    resetChat();
+  </script>
+</body>
+</html>

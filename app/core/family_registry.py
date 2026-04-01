@@ -40,6 +40,10 @@ _FAMILY_REGISTRY: dict[str, FamilyProfile] = {
 }
 
 
+def list_supported_families() -> list[str]:
+    return sorted(_FAMILY_REGISTRY.keys())
+
+
 def get_family_profile(family: str) -> FamilyProfile:
     normalized = family.strip().lower()
     if normalized not in _FAMILY_REGISTRY:

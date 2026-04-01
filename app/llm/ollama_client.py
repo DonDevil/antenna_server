@@ -53,3 +53,32 @@ def generate_json(
     if not isinstance(parsed, dict):
         return None
     return parsed
+
+
+def generate_text(
+    *,
+    prompt: str,
+    system_prompt: str,
+    timeout_sec: int | None = None,
+) -> str | None:
+    timeout = timeout_sec or int(OLLAMA_SETTINGS.timeout_sec)
+    payload = {
+        "model": OLLAMA_SETTINGS.model_name,
+        "prompt": prompt,
+        "system": system_prompt,
+        "stream": False,
+    }
+
+    try:
+        with httpx.Client(timeout=timeout) as client:
+            response = client.post(f"{OLLAMA_SETTINGS.base_url}/api/generate", json=payload)
+            response.raise_for_status()
+            data = response.json()
+    except Exception:
+        return None
+
+    text = data.get("response")
+    if not isinstance(text, str):
+        return None
+    text = text.strip()
+    return text or None

@@ -5,11 +5,16 @@ from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi.middleware.cors import CORSMiddleware
 
+from app.core.capabilities_catalog import load_capabilities_catalog
 from app.core.exceptions import FamilyProfileConstraintError, UnsupportedAntennaFamilyError
+from app.core.family_registry import list_supported_families
 from app.core.json_contracts import ContractValidationError, validate_contract
 from app.core.schemas import OptimizeRequest, OptimizeResponse
 from app.core.session_store import SessionStore
+from app.llm.intent_parser import summarize_user_intent
+from app.llm.ollama_client import check_ollama_health, generate_text
 from central_brain import CentralBrain
 from config import API_SETTINGS
 
@@ -17,6 +22,13 @@ from config import API_SETTINGS
 brain = CentralBrain()
 session_store = SessionStore()
 app = FastAPI(title=API_SETTINGS.title, version=API_SETTINGS.version)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 @app.get("/api/v1/health")
@@ -26,6 +38,137 @@ def health() -> dict[str, Any]:
         "service": API_SETTINGS.title,
         "version": API_SETTINGS.version,
         "ann_model_ready": brain.ann_predictor.is_ready(),
+    }
+
+
+@app.get("/api/v1/capabilities")
+def capabilities() -> dict[str, Any]:
+    return load_capabilities_catalog()
+
+
+@app.post("/api/v1/intent/parse")
+def parse_intent(payload: dict[str, Any]) -> dict[str, Any]:
+    user_request = payload.get("user_request")
+    if not isinstance(user_request, str) or not user_request.strip():
+        raise HTTPException(
+            status_code=422,
+            detail={"error_code": "INVALID_INTENT_REQUEST", "message": "user_request must be a non-empty string"},
+        )
+    summary = summarize_user_intent(user_request)
+    return {
+        "status": "ok",
+        "intent_summary": summary,
+    }
+
+
+@app.post("/api/v1/chat")
+def chat(payload: dict[str, Any]) -> dict[str, Any]:
+    user_message = payload.get("message")
+    current_requirements = payload.get("requirements", {})
+    if not isinstance(user_message, str) or not user_message.strip():
+        raise HTTPException(
+            status_code=422,
+            detail={"error_code": "INVALID_CHAT_REQUEST", "message": "message must be a non-empty string"},
+        )
+    if not isinstance(current_requirements, dict):
+        current_requirements = {}
+
+    intent = summarize_user_intent(user_message)
+    capabilities_catalog = load_capabilities_catalog()
+    parsed_freq = intent.get("parsed_frequency_ghz")
+    parsed_bw = intent.get("parsed_bandwidth_mhz")
+    parsed_family = intent.get("parsed_antenna_family")
+
+    merged = {
+        "frequency_ghz": parsed_freq if parsed_freq is not None else current_requirements.get("frequency_ghz"),
+        "bandwidth_mhz": parsed_bw if parsed_bw is not None else current_requirements.get("bandwidth_mhz"),
+        "antenna_family": parsed_family if parsed_family is not None else current_requirements.get("antenna_family"),
+    }
+
+    supported_families = list_supported_families()
+    frequency_range = capabilities_catalog.get("frequency_range_ghz", {})
+    bandwidth_range = capabilities_catalog.get("bandwidth_range_mhz", {})
+    conductor_materials = capabilities_catalog.get("available_conductor_materials", [])
+    substrate_materials = capabilities_catalog.get("available_substrate_materials", [])
+
+    freq_min = frequency_range.get("min")
+    freq_max = frequency_range.get("max")
+    bw_min = bandwidth_range.get("min")
+    bw_max = bandwidth_range.get("max")
+
+    text = user_message.lower()
+    if "available" in text and "famil" in text:
+        assistant_message = (
+            "Available antenna families are: "
+            f"{', '.join(supported_families)}. "
+            "For rectangular patch, use microstrip_patch. "
+            "Tell me target frequency (GHz), bandwidth (MHz), and chosen family to start the pipeline."
+        )
+    elif "capabil" in text or ("range" in text and ("frequency" in text or "bandwidth" in text)):
+        assistant_message = (
+            "Current capability ranges are: "
+            f"frequency {freq_min} to {freq_max} GHz, "
+            f"bandwidth {bw_min} to {bw_max} MHz. "
+            "These are configurable from the capabilities catalog."
+        )
+    elif "substrate" in text or "conductor" in text or "material" in text:
+        assistant_message = (
+            f"Available conductor materials: {', '.join(map(str, conductor_materials))}. "
+            f"Available substrate materials: {', '.join(map(str, substrate_materials))}."
+        )
+    else:
+        missing = [
+            key
+            for key, value in merged.items()
+            if value in (None, "")
+        ]
+        if check_ollama_health(timeout_sec=3):
+            llm_text = generate_text(
+                system_prompt=(
+                    "You are an antenna design assistant. "
+                    "Answer user's question in 2-5 lines and guide them to provide frequency_ghz, "
+                    "bandwidth_mhz, and antenna_family. Keep it concise and practical."
+                ),
+                prompt=(
+                    f"User message: {user_message}\n"
+                    f"Current extracted requirements: {merged}\n"
+                    f"Supported families: {supported_families}\n"
+                    f"Capability ranges: frequency_ghz={frequency_range}, bandwidth_mhz={bandwidth_range}\n"
+                    f"Available conductor materials: {conductor_materials}\n"
+                    f"Available substrate materials: {substrate_materials}\n"
+                    "If user asks family choices, list all exactly."
+                ),
+                timeout_sec=30,
+            )
+            assistant_message = llm_text or "Tell me frequency (GHz), bandwidth (MHz), and antenna family."
+        else:
+            if missing:
+                assistant_message = (
+                    "Got it. I still need: "
+                    f"{', '.join(missing)}. "
+                    f"Supported families: {', '.join(supported_families)}. "
+                    f"Frequency range: {freq_min}-{freq_max} GHz. "
+                    f"Bandwidth range: {bw_min}-{bw_max} MHz."
+                )
+            else:
+                assistant_message = (
+                    "Great, requirements captured. "
+                    f"frequency={merged['frequency_ghz']} GHz, bandwidth={merged['bandwidth_mhz']} MHz, "
+                    f"family={merged['antenna_family']}. You can start the pipeline now."
+                )
+
+    return {
+        "status": "ok",
+        "assistant_message": assistant_message,
+        "intent_summary": intent,
+        "requirements": merged,
+        "supported_families": supported_families,
+        "capabilities": {
+            "frequency_range_ghz": frequency_range,
+            "bandwidth_range_mhz": bandwidth_range,
+            "available_conductor_materials": conductor_materials,
+            "available_substrate_materials": substrate_materials,
+        },
     }
 
 

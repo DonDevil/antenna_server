@@ -1,0 +1,29 @@
+{
+  "schema_version": "antenna_capabilities.v1",
+  "frequency_range_ghz": {
+    "min": 0.5,
+    "max": 10.0
+  },
+  "bandwidth_range_mhz": {
+    "min": 5.0,
+    "max": 2000.0
+  },
+  "supported_families": [
+    "amc_patch",
+    "microstrip_patch",
+    "wban_patch"
+  ],
+  "available_conductor_materials": [
+    "Copper (annealed)",
+    "Aluminum",
+    "Silver",
+    "Gold"
+  ],
+  "available_substrate_materials": [
+    "FR-4 (lossy)",
+    "Rogers RT/duroid 5880",
+    "Rogers RO3003",
+    "Rogers RO4350B"
+  ],
+  "notes": "Placeholder catalog. Update this file to change user-visible capabilities and LLM context."
+}

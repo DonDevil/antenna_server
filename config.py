@@ -35,7 +35,7 @@ class PlannerSettings:
     dynamic_enabled: bool = True
     command_catalog_version: str = "v1"
     action_plan_version: str = "v1"
-    llm_enabled_for_intent: bool = False
+    llm_enabled_for_intent: bool = True
     llm_enabled_for_refinement: bool = True
     llm_refinement_confidence_threshold: float = 0.62
     llm_max_calls_per_session: int = 2
