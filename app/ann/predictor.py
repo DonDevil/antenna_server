@@ -18,9 +18,30 @@ class AnnPredictor:
         self.metadata_path = metadata_path or ANN_SETTINGS.metadata_path
         self._model = None
         self._meta = None
+        self._last_error: str | None = None
 
     def is_ready(self) -> bool:
         return self.checkpoint_path.exists() and self.metadata_path.exists()
+
+    def is_loaded(self) -> bool:
+        return self._model is not None and self._meta is not None
+
+    def last_error(self) -> str | None:
+        return self._last_error
+
+    def warm_up(self) -> bool:
+        if not self.is_ready():
+            self._last_error = "ann_artifacts_missing"
+            return False
+        try:
+            self._load()
+        except Exception as exc:
+            self._model = None
+            self._meta = None
+            self._last_error = str(exc)
+            return False
+        self._last_error = None
+        return self.is_loaded()
 
     def _load(self) -> None:
         if self._model is not None:
@@ -34,6 +55,7 @@ class AnnPredictor:
         model.load_state_dict(checkpoint["state_dict"])
         model.eval()
         self._model = model
+        self._last_error = None
 
     def predict(self, target: TargetSpec) -> AnnPrediction:
         if not self.is_ready():

@@ -48,3 +48,19 @@ def test_chat_answers_material_and_capability_questions(tmp_path: Path) -> None:
     assert "capabilities" in data
     assert "available_substrate_materials" in data["capabilities"]
     assert isinstance(data["capabilities"]["available_substrate_materials"], list)
+
+
+def test_health_endpoint_reports_dependency_statuses(tmp_path: Path) -> None:
+    client = _build_test_client(tmp_path)
+
+    response = client.get("/api/v1/health")
+    assert response.status_code == 200
+    data = response.json()
+
+    assert data["status"] == "ok"
+    assert data["ann_status"] in {"available", "loading", "none"}
+    assert data["llm_status"] in {"available", "loading", "none"}
+    assert isinstance(data["ann_model_ready"], bool)
+    assert isinstance(data["ollama_reachable"], bool)
+    assert isinstance(data["llm_model"], str)
+    assert data["llm_model"]

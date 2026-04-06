@@ -498,10 +498,15 @@ def test_full_pipeline_optimize_refine_complete_with_llm(tmp_path: Path) -> None
 
 
 def test_health_endpoint_reflects_ollama_status(tmp_path: Path) -> None:
-    """The /api/v1/health endpoint must return 200 and include ann_model_ready."""
+    """The /api/v1/health endpoint must return dependency readiness details."""
     client = _build_test_client(tmp_path)
     resp = client.get("/api/v1/health")
     assert resp.status_code == 200
     data = resp.json()
     assert data["status"] == "ok"
     assert "ann_model_ready" in data
+    assert "ann_status" in data
+    assert data["ann_status"] in {"available", "loading", "none"}
+    assert "llm_status" in data
+    assert data["llm_status"] in {"available", "loading", "none"}
+    assert data["llm_model"]

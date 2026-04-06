@@ -33,6 +33,7 @@ def generate_json(
         "system": system_prompt,
         "stream": False,
         "format": "json",
+        "keep_alive": "15m",
     }
 
     try:
@@ -67,6 +68,7 @@ def generate_text(
         "prompt": prompt,
         "system": system_prompt,
         "stream": False,
+        "keep_alive": "15m",
     }
 
     try:
@@ -82,3 +84,14 @@ def generate_text(
         return None
     text = text.strip()
     return text or None
+
+
+def warmup_model(timeout_sec: int | None = None) -> bool:
+    if not check_ollama_health(timeout_sec=_HEALTH_PROBE_TIMEOUT_SEC):
+        return False
+    text = generate_text(
+        prompt="Reply with READY only.",
+        system_prompt="Warm the model and reply with READY only.",
+        timeout_sec=timeout_sec,
+    )
+    return text is not None

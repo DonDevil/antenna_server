@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import threading
 from datetime import datetime, timezone
 from typing import Any
 
@@ -14,9 +15,9 @@ from app.core.json_contracts import ContractValidationError, validate_contract
 from app.core.schemas import OptimizeRequest, OptimizeResponse
 from app.core.session_store import SessionStore
 from app.llm.intent_parser import summarize_user_intent
-from app.llm.ollama_client import check_ollama_health, generate_text
+from app.llm.ollama_client import check_ollama_health, generate_text, warmup_model
 from central_brain import CentralBrain
-from config import API_SETTINGS
+from config import ANN_SETTINGS, API_SETTINGS, OLLAMA_SETTINGS
 
 
 brain = CentralBrain()
@@ -30,14 +31,110 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+_runtime_health_lock = threading.Lock()
+_runtime_health: dict[str, Any] = {
+    "warmup_in_progress": False,
+    "ann_status": "none",
+    "ann_message": "warmup_not_started",
+    "llm_status": "none",
+    "llm_message": "warmup_not_started",
+}
+
+
+def _set_runtime_health(**updates: Any) -> None:
+    with _runtime_health_lock:
+        _runtime_health.update(updates)
+
+
+def _warm_dependencies() -> None:
+    try:
+        ann_ready = brain.ann_predictor.warm_up()
+        if ann_ready:
+            _set_runtime_health(ann_status="available", ann_message="ann_model_loaded")
+            print(f"[startup] ANN ready for use: {ANN_SETTINGS.model_version}")
+        else:
+            ann_error = brain.ann_predictor.last_error() or "ann_model_unavailable"
+            _set_runtime_health(ann_status="none", ann_message=ann_error)
+            print(f"[startup] ANN unavailable: {ann_error}")
+
+        print(f"[startup] Warming LLM model '{OLLAMA_SETTINGS.model_name}'...")
+        llm_ready = warmup_model(timeout_sec=max(120, int(OLLAMA_SETTINGS.timeout_sec)))
+        if llm_ready:
+            _set_runtime_health(llm_status="available", llm_message="llm_ready")
+            print(f"[startup] LLM ready for use: {OLLAMA_SETTINGS.model_name}")
+        else:
+            llm_message = "ollama_unreachable_or_model_not_loaded"
+            if check_ollama_health(timeout_sec=3):
+                llm_message = "llm_warmup_failed"
+            _set_runtime_health(llm_status="none", llm_message=llm_message)
+            print(f"[startup] LLM unavailable: {llm_message}")
+    finally:
+        _set_runtime_health(warmup_in_progress=False)
+
+
+def start_background_warmup(force: bool = False) -> None:
+    with _runtime_health_lock:
+        if bool(_runtime_health.get("warmup_in_progress")):
+            return
+        if not force and _runtime_health.get("ann_status") == "available" and _runtime_health.get("llm_status") == "available":
+            return
+        _runtime_health["warmup_in_progress"] = True
+        if _runtime_health.get("ann_status") != "available":
+            _runtime_health["ann_status"] = "loading"
+            _runtime_health["ann_message"] = "warming_ann"
+        if _runtime_health.get("llm_status") != "available":
+            _runtime_health["llm_status"] = "loading"
+            _runtime_health["llm_message"] = f"warming_{OLLAMA_SETTINGS.model_name}"
+
+    worker = threading.Thread(target=_warm_dependencies, name="dependency-warmup", daemon=True)
+    worker.start()
+
+
+@app.on_event("startup")
+async def startup_warmup() -> None:
+    start_background_warmup()
+
 
 @app.get("/api/v1/health")
 def health() -> dict[str, Any]:
+    start_background_warmup()
+
+    ann_artifacts_ready = brain.ann_predictor.is_ready()
+    ann_loaded = brain.ann_predictor.is_loaded()
+    if ann_loaded:
+        _set_runtime_health(ann_status="available", ann_message="ann_model_loaded")
+
+    ollama_reachable = check_ollama_health(timeout_sec=1)
+    with _runtime_health_lock:
+        llm_status = str(_runtime_health.get("llm_status", "none"))
+    if ollama_reachable and llm_status == "none":
+        start_background_warmup(force=True)
+    elif not ollama_reachable and llm_status == "available":
+        _set_runtime_health(llm_status="none", llm_message="ollama_unreachable")
+
+    with _runtime_health_lock:
+        ann_status = str(_runtime_health.get("ann_status", "none"))
+        ann_message = _runtime_health.get("ann_message")
+        llm_status = str(_runtime_health.get("llm_status", "none"))
+        llm_message = _runtime_health.get("llm_message")
+
+    if not ann_artifacts_ready and ann_status != "loading":
+        ann_status = "none"
+
     return {
         "status": "ok",
         "service": API_SETTINGS.title,
         "version": API_SETTINGS.version,
-        "ann_model_ready": brain.ann_predictor.is_ready(),
+        "ann_model_ready": ann_artifacts_ready,
+        "ann_model_loaded": ann_loaded,
+        "ann_status": ann_status,
+        "ann_model_version": ANN_SETTINGS.model_version,
+        "llm_status": llm_status,
+        "llm_model": OLLAMA_SETTINGS.model_name,
+        "ollama_base_url": OLLAMA_SETTINGS.base_url,
+        "ollama_reachable": ollama_reachable,
+        "ann_message": ann_message,
+        "llm_message": llm_message,
     }
 
 
