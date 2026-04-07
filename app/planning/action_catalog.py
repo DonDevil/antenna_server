@@ -165,6 +165,18 @@ ACTION_CATALOG: dict[str, Any] = {
             ],
         },
         {
+            "action": "add_farfield_monitor",
+            "command": "add_farfield_monitor",
+            "description": "Add the CST farfield monitor required before simulation so farfield export succeeds.",
+            "phase": "simulation",
+            "prerequisites": ["set_solver"],
+            "incompatible_with": [],
+            "parameter_definitions": [
+                {"name": "monitor_name", "type": "string", "required": True, "min_length": 1},
+                {"name": "frequency_ghz", "type": "number", "required": True, "minimum": 0.0, "unit": "ghz"}
+            ],
+        },
+        {
             "action": "run_simulation",
             "command": "run_simulation",
             "description": "Run the CST simulation with bounded timeout.",

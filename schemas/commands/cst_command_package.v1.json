@@ -423,6 +423,25 @@
             {"$ref": "#/$defs/commandBase"},
             {
               "properties": {
+                "command": {"const": "add_farfield_monitor"},
+                "params": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["monitor_name", "frequency_ghz"],
+                  "properties": {
+                    "monitor_name": {"type": "string", "minLength": 1},
+                    "frequency_ghz": {"type": "number", "exclusiveMinimum": 0.0}
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {"$ref": "#/$defs/commandBase"},
+            {
+              "properties": {
                 "command": {"const": "run_simulation"},
                 "params": {
                   "type": "object",

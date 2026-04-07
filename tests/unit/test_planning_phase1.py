@@ -93,6 +93,20 @@ def test_fixed_action_plan_compiles_to_valid_command_package() -> None:
     assert command_package["commands"][-1]["command"] == "export_farfield"
 
 
+def test_farfield_monitor_command_is_inserted_before_simulation() -> None:
+    command_package = build_command_package(
+        _request(),
+        _ann(),
+        session_id="session-monitor",
+        trace_id="trace-monitor",
+        iteration_index=0,
+    )
+
+    commands = [item["command"] for item in command_package["commands"]]
+    assert "add_farfield_monitor" in commands
+    assert commands.index("add_farfield_monitor") < commands.index("run_simulation")
+
+
 def test_build_command_package_uses_phase1_compiler_path() -> None:
     command_package = build_command_package(
         _request(),

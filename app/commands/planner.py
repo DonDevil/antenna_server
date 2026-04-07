@@ -197,7 +197,7 @@ def build_fixed_action_plan(
             "expected_effects": ["solver_ready"],
         },
         {
-            "seq": 13,
+            "seq": 14,
             "action": "run_simulation",
             "command": "run_simulation",
             "params": {"timeout_sec": min(max_sim_timeout, 900)},
@@ -207,7 +207,7 @@ def build_fixed_action_plan(
             "expected_effects": ["simulation_started"],
         },
         {
-            "seq": 14,
+            "seq": 15,
             "action": "export_s_parameters",
             "command": "export_s_parameters",
             "params": {"format": export_format, "destination_hint": "s11"},
@@ -217,7 +217,7 @@ def build_fixed_action_plan(
             "expected_effects": ["s_parameters_available"],
         },
         {
-            "seq": 15,
+            "seq": 16,
             "action": "extract_summary_metrics",
             "command": "extract_summary_metrics",
             "params": {"metrics": ["center_frequency_ghz", "bandwidth_mhz", "return_loss_db", "vswr", "gain_dbi"]},
@@ -229,9 +229,25 @@ def build_fixed_action_plan(
     ]
 
     if supports_farfield:
+        actions.insert(
+            12,
+            {
+                "seq": 13,
+                "action": "add_farfield_monitor",
+                "command": "add_farfield_monitor",
+                "params": {
+                    "monitor_name": f"farfield_{target_frequency:.3f}ghz".replace(".", "p"),
+                    "frequency_ghz": target_frequency,
+                },
+                "on_failure": "abort",
+                "checksum_scope": "simulation",
+                "rationale_tags": ["client_capability_export", "simulation_preconditions"],
+                "expected_effects": ["farfield_monitor_configured"],
+            },
+        )
         actions.append(
             {
-                "seq": 16,
+                "seq": 17,
                 "action": "export_farfield",
                 "command": "export_farfield",
                 "params": {

@@ -180,6 +180,7 @@
             "create_port",
             "set_boundary",
             "set_solver",
+            "add_farfield_monitor",
             "run_simulation",
             "export_s_parameters",
             "export_farfield",

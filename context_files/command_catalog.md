@@ -138,6 +138,15 @@ Parameters:
 - `solver_type`: `time_domain` or `frequency_domain`
 - `mesh_cells_per_wavelength`: optional integer
 
+### `add_farfield_monitor`
+
+Purpose: add the CST farfield monitor required before running the simulation so farfield export is available.
+
+Parameters:
+
+- `monitor_name`: string
+- `frequency_ghz`: number
+
 ### `run_simulation`
 
 Purpose: execute the solver.
@@ -186,10 +195,11 @@ Parameters:
 9. `create_port`
 10. `set_boundary`
 11. `set_solver`
-12. `run_simulation`
-13. `export_s_parameters`
-14. `export_farfield` if supported and requested
-15. `extract_summary_metrics`
+12. `add_farfield_monitor` if farfield export is supported
+13. `run_simulation`
+14. `export_s_parameters`
+15. `export_farfield` if supported and requested
+16. `extract_summary_metrics`
 
 ## Forbidden Behavior
 
