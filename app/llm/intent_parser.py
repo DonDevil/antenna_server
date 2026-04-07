@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from config import PLANNER_SETTINGS
+from config import OLLAMA_SETTINGS, PLANNER_SETTINGS
 from app.llm.ollama_client import generate_json
 
 
@@ -39,7 +39,12 @@ def summarize_user_intent(user_request: str) -> dict[str, Any]:
             "\"antenna_family\": <amc_patch|microstrip_patch|wban_patch|null>}"
         )
         prompt = f"User request: {user_request}"
-        llm_result = generate_json(prompt=prompt, system_prompt=system_prompt, timeout_sec=30)
+        llm_result = generate_json(
+            prompt=prompt,
+            system_prompt=system_prompt,
+            timeout_sec=30,
+            model_name=OLLAMA_SETTINGS.fast_model_name,
+        )
         if isinstance(llm_result, dict):
             try:
                 llm_freq = llm_result.get("frequency_ghz")

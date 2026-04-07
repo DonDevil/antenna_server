@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import Any, cast
 
 import httpx
 
@@ -25,10 +25,11 @@ def generate_json(
     prompt: str,
     system_prompt: str,
     timeout_sec: int | None = None,
+    model_name: str | None = None,
 ) -> dict[str, Any] | None:
     timeout = timeout_sec or int(OLLAMA_SETTINGS.timeout_sec)
-    payload = {
-        "model": OLLAMA_SETTINGS.model_name,
+    payload: dict[str, Any] = {
+        "model": model_name or OLLAMA_SETTINGS.fast_model_name,
         "prompt": prompt,
         "system": system_prompt,
         "stream": False,
@@ -53,7 +54,7 @@ def generate_json(
         return None
     if not isinstance(parsed, dict):
         return None
-    return parsed
+    return cast(dict[str, Any], parsed)
 
 
 def generate_text(
@@ -61,10 +62,11 @@ def generate_text(
     prompt: str,
     system_prompt: str,
     timeout_sec: int | None = None,
+    model_name: str | None = None,
 ) -> str | None:
     timeout = timeout_sec or int(OLLAMA_SETTINGS.timeout_sec)
-    payload = {
-        "model": OLLAMA_SETTINGS.model_name,
+    payload: dict[str, Any] = {
+        "model": model_name or OLLAMA_SETTINGS.big_model_name,
         "prompt": prompt,
         "system": system_prompt,
         "stream": False,
@@ -86,12 +88,13 @@ def generate_text(
     return text or None
 
 
-def warmup_model(timeout_sec: int | None = None) -> bool:
+def warmup_model(timeout_sec: int | None = None, model_name: str | None = None) -> bool:
     if not check_ollama_health(timeout_sec=_HEALTH_PROBE_TIMEOUT_SEC):
         return False
     text = generate_text(
         prompt="Reply with READY only.",
         system_prompt="Warm the model and reply with READY only.",
         timeout_sec=timeout_sec,
+        model_name=model_name,
     )
     return text is not None

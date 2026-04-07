@@ -192,11 +192,29 @@ class CentralBrain:
 
         request = OptimizeRequest.model_validate(session["request"])
         current_iteration = int(session["current_iteration"])
+        notes_text = str(payload.get("notes") or "").strip().lower()
+        completion_requested = bool(payload.get("completion_requested", False)) or any(
+            marker in notes_text
+            for marker in (
+                "marked this design done",
+                "session marked complete",
+                "session completed",
+                "finish the session",
+                "user completed",
+            )
+        )
+
         reported_iteration = int(payload["iteration_index"])
         if reported_iteration != current_iteration:
-            raise ValueError(
-                f"Feedback iteration mismatch: expected {current_iteration}, got {reported_iteration}"
-            )
+            # The QML client can restore a locally saved session after CST execution,
+            # which leaves the local iteration one step ahead of the server until
+            # feedback is posted. Be tolerant for explicit Done/completion requests.
+            if completion_requested and reported_iteration == current_iteration + 1:
+                reported_iteration = current_iteration
+            else:
+                raise ValueError(
+                    f"Feedback iteration mismatch: expected {current_iteration}, got {reported_iteration}"
+                )
 
         current_ann = AnnPrediction.model_validate(session["current_ann_prediction"])
         evaluation = evaluate_acceptance(request, payload)
@@ -240,6 +258,33 @@ class CentralBrain:
                 "stop_reason": "acceptance_criteria_met",
                 "evaluation": evaluation,
                 "message": "Acceptance criteria met. No further refinement needed.",
+            }
+
+        if completion_requested:
+            session["status"] = "completed"
+            session["stop_reason"] = "user_marked_done"
+            session["current_iteration"] = current_iteration
+            session["history"][-1]["decision_reason"] = "user_marked_done"
+            session["history"][-1]["stop_reason"] = "user_marked_done"
+            self._append_manifest_history(
+                session=session,
+                iteration_index=current_iteration,
+                decision_reason="user_marked_done",
+                stop_reason="user_marked_done",
+                command_package=session.get("current_command_package"),
+                planning_provenance=None,
+            )
+            self.session_store.save(session_id, session)
+            return {
+                "status": "completed",
+                "session_id": session_id,
+                "trace_id": session["trace_id"],
+                "accepted": bool(evaluation["accepted"]),
+                "iteration_index": current_iteration,
+                "decision_reason": "user_marked_done",
+                "stop_reason": "user_marked_done",
+                "evaluation": evaluation,
+                "message": "Session completed by explicit client request.",
             }
 
         if current_iteration + 1 >= int(session["max_iterations"]):

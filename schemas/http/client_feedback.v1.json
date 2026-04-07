@@ -47,6 +47,10 @@
         "cancelled"
       ]
     },
+    "completion_requested": {
+      "type": "boolean",
+      "default": false
+    },
     "actual_center_frequency_ghz": {
       "type": "number",
       "exclusiveMinimum": 0.0

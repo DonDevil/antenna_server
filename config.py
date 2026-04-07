@@ -25,7 +25,9 @@ class ApiSettings:
 @dataclass(frozen=True)
 class OllamaSettings:
     base_url: str = "http://localhost:11434"
-    model_name: str = "deepseek-r1:8b"
+    fast_model_name: str = "deepseek-r1:1.5b"
+    big_model_name: str = "qwen3.5:4b"
+    model_name: str = "qwen3.5:4b"
     timeout_sec: int = 90
 
 

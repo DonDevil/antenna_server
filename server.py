@@ -57,11 +57,33 @@ def _warm_dependencies() -> None:
             _set_runtime_health(ann_status="none", ann_message=ann_error)
             print(f"[startup] ANN unavailable: {ann_error}")
 
-        print(f"[startup] Warming LLM model '{OLLAMA_SETTINGS.model_name}'...")
-        llm_ready = warmup_model(timeout_sec=max(120, int(OLLAMA_SETTINGS.timeout_sec)))
+        fast_name = OLLAMA_SETTINGS.fast_model_name
+        big_name = OLLAMA_SETTINGS.big_model_name
+
+        print(f"[startup] Warming fast intent model '{fast_name}'...")
+        fast_ready = warmup_model(
+            timeout_sec=max(60, int(OLLAMA_SETTINGS.timeout_sec)),
+            model_name=fast_name,
+        )
+        print(f"[startup] Warming chat model '{big_name}'...")
+        big_ready = warmup_model(
+            timeout_sec=max(120, int(OLLAMA_SETTINGS.timeout_sec)),
+            model_name=big_name,
+        )
+
+        llm_ready = fast_ready or big_ready
         if llm_ready:
-            _set_runtime_health(llm_status="available", llm_message="llm_ready")
-            print(f"[startup] LLM ready for use: {OLLAMA_SETTINGS.model_name}")
+            message_parts: list[str] = []
+            if fast_ready:
+                message_parts.append(f"fast_ready:{fast_name}")
+            if big_ready:
+                message_parts.append(f"big_ready:{big_name}")
+            llm_message = ", ".join(message_parts) if message_parts else "llm_ready"
+            _set_runtime_health(llm_status="available", llm_message=llm_message)
+            if fast_ready:
+                print(f"[startup] Fast intent model ready: {fast_name}")
+            if big_ready:
+                print(f"[startup] Chat model ready: {big_name}")
         else:
             llm_message = "ollama_unreachable_or_model_not_loaded"
             if check_ollama_health(timeout_sec=3):
@@ -84,8 +106,10 @@ def start_background_warmup(force: bool = False) -> None:
             _runtime_health["ann_message"] = "warming_ann"
         if _runtime_health.get("llm_status") != "available":
             _runtime_health["llm_status"] = "loading"
-            _runtime_health["llm_message"] = f"warming_{OLLAMA_SETTINGS.model_name}"
-
+        _runtime_health["llm_message"] = (
+            f"warming_fast={OLLAMA_SETTINGS.fast_model_name}, "
+            f"warming_big={OLLAMA_SETTINGS.big_model_name}"
+        )
     worker = threading.Thread(target=_warm_dependencies, name="dependency-warmup", daemon=True)
     worker.start()
 
@@ -131,6 +155,8 @@ def health() -> dict[str, Any]:
         "ann_model_version": ANN_SETTINGS.model_version,
         "llm_status": llm_status,
         "llm_model": OLLAMA_SETTINGS.model_name,
+        "fast_llm_model": OLLAMA_SETTINGS.fast_model_name,
+        "big_llm_model": OLLAMA_SETTINGS.big_model_name,
         "ollama_base_url": OLLAMA_SETTINGS.base_url,
         "ollama_reachable": ollama_reachable,
         "ann_message": ann_message,
@@ -236,6 +262,7 @@ def chat(payload: dict[str, Any]) -> dict[str, Any]:
                     "If user asks family choices, list all exactly."
                 ),
                 timeout_sec=30,
+                model_name=OLLAMA_SETTINGS.big_model_name,
             )
             assistant_message = llm_text or "Tell me frequency (GHz), bandwidth (MHz), and antenna family."
         else:
@@ -323,9 +350,17 @@ def get_session(session_id: str) -> dict[str, Any]:
                 "center_frequency_abs_error_ghz": float(residual.get("center_frequency_abs_error_ghz", 0.0)),
                 "bandwidth_abs_error_mhz": float(residual.get("bandwidth_abs_error_mhz", 0.0)),
             }
+        current_command_package = session.get("current_command_package")
+        design_id = None
+        if isinstance(current_command_package, dict):
+            design_id = current_command_package.get("design_id")
+
         return {
             "session_id": session_id,
+            "trace_id": session.get("trace_id"),
+            "design_id": design_id,
             "status": session.get("status", "unknown"),
+            "current_stage": session.get("status", "unknown"),
             "stop_reason": session.get("stop_reason"),
             "current_iteration": session.get("current_iteration", 0),
             "max_iterations": session.get("max_iterations", 0),
@@ -336,6 +371,7 @@ def get_session(session_id: str) -> dict[str, Any]:
             "latest_planning_decision": session.get("artifact_manifest", {}).get("latest_planning_decision"),
             "history_count": len(session.get("history", [])),
             "latest_entry": session.get("history", [{}])[-1] if session.get("history") else None,
+            "command_package": current_command_package,
         }
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail={"error_code": "SESSION_NOT_FOUND", "message": str(exc)}) from exc

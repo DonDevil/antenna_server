@@ -61,8 +61,9 @@ def _feedback_payload(
     actual_bandwidth_mhz: float,
     actual_vswr: float,
     actual_gain_dbi: float,
+    completion_requested: bool = False,
 ) -> dict[str, Any]:
-    return {
+    payload = {
         "schema_version": "client_feedback.v1",
         "session_id": session_id,
         "trace_id": trace_id,
@@ -81,6 +82,9 @@ def _feedback_payload(
             "current_distribution_ref": None,
         },
     }
+    if completion_requested:
+        payload["completion_requested"] = True
+    return payload
 
 
 def _build_test_client(tmp_path: Path) -> TestClient:
@@ -88,6 +92,49 @@ def _build_test_client(tmp_path: Path) -> TestClient:
     server.session_store = test_store
     server.brain.session_store = test_store
     return TestClient(server.app)
+
+
+def test_done_request_completes_session_for_qml_client_even_with_restore_offset(tmp_path: Path) -> None:
+    client = _build_test_client(tmp_path)
+
+    optimize_response = client.post("/api/v1/optimize", json=_optimize_payload())
+    assert optimize_response.status_code == 200
+    optimize_data = optimize_response.json()
+
+    session_id = optimize_data["session_id"]
+    trace_id = optimize_data["trace_id"]
+    design_id = optimize_data["command_package"]["design_id"]
+
+    # The QML client can restore a locally saved session after CST execution,
+    # which leaves the local iteration one step ahead of the server until
+    # feedback is submitted. A Done request should still complete the session.
+    done_response = client.post(
+        "/api/v1/client-feedback",
+        json=_feedback_payload(
+            session_id=session_id,
+            trace_id=trace_id,
+            design_id=design_id,
+            iteration_index=1,
+            actual_center_frequency_ghz=2.20,
+            actual_bandwidth_mhz=40.0,
+            actual_vswr=3.2,
+            actual_gain_dbi=2.0,
+            completion_requested=True,
+        ),
+    )
+    assert done_response.status_code == 200
+    done_data = done_response.json()
+    assert done_data["status"] == "completed"
+    assert done_data["accepted"] is False
+    assert done_data["decision_reason"] == "user_marked_done"
+    assert done_data["stop_reason"] == "user_marked_done"
+
+    final_session = client.get(f"/api/v1/sessions/{session_id}")
+    assert final_session.status_code == 200
+    final_session_data = final_session.json()
+    assert final_session_data["status"] == "completed"
+    assert final_session_data["stop_reason"] == "user_marked_done"
+    assert final_session_data["current_iteration"] == 0
 
 
 def test_optimize_feedback_refine_complete_and_query(tmp_path: Path) -> None:
