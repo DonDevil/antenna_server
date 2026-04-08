@@ -62,6 +62,51 @@ ACTION_CATALOG: dict[str, Any] = {
             ],
         },
         {
+            "action": "create_component",
+            "command": "create_component",
+            "description": "Create the CST component scope that will hold the antenna solids.",
+            "phase": "geometry",
+            "prerequisites": ["define_material"],
+            "incompatible_with": [],
+            "parameter_definitions": [
+                {"name": "component", "type": "string", "required": True, "min_length": 1}
+            ],
+        },
+        {
+            "action": "define_brick",
+            "command": "define_brick",
+            "description": "Define a rectangular CST solid used for substrate, ground, feed, or rectangular patch geometry.",
+            "phase": "geometry",
+            "prerequisites": ["create_component"],
+            "incompatible_with": [],
+            "parameter_definitions": [
+                {"name": "name", "type": "string", "required": True},
+                {"name": "component", "type": "string", "required": True},
+                {"name": "material", "type": "string", "required": False},
+                {"name": "xrange", "type": "array", "required": True, "min_items": 2},
+                {"name": "yrange", "type": "array", "required": True, "min_items": 2},
+                {"name": "zrange", "type": "array", "required": True, "min_items": 2}
+            ],
+        },
+        {
+            "action": "define_cylinder",
+            "command": "define_cylinder",
+            "description": "Define a circular CST solid used for circular patch families and cylindrical features.",
+            "phase": "geometry",
+            "prerequisites": ["create_component"],
+            "incompatible_with": [],
+            "parameter_definitions": [
+                {"name": "name", "type": "string", "required": True},
+                {"name": "component", "type": "string", "required": True},
+                {"name": "material", "type": "string", "required": False},
+                {"name": "axis", "type": "string", "required": False, "enum": ["x", "y", "z"]},
+                {"name": "center", "type": "array", "required": False, "min_items": 2},
+                {"name": "outer_radius", "type": "number", "required": False, "minimum": 0.0, "unit": "mm"},
+                {"name": "inner_radius", "type": "number", "required": False, "minimum": 0.0, "unit": "mm"},
+                {"name": "zrange", "type": "array", "required": True, "min_items": 2}
+            ],
+        },
+        {
             "action": "create_substrate",
             "command": "create_substrate",
             "description": "Create the substrate solid with ANN-predicted dimensions.",

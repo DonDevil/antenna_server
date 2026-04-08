@@ -91,6 +91,29 @@
       ]
     },
     {
+      "id": "return_loss.poor",
+      "when": {
+        "all_of": [
+          {"feature": "return_loss_deficit_db", "op": ">", "value": 2.0}
+        ]
+      },
+      "candidates": [
+        {
+          "action": "feedline_matching_adjustment",
+          "base_score": 0.78,
+          "rationale": "Return loss is materially off target; prioritize feed-position and feed-width tuning.",
+          "strategy": {
+            "scale": {
+              "feed_width_mm": 1.04
+            },
+            "offset": {
+              "feed_offset_y_mm": -0.35
+            }
+          }
+        }
+      ]
+    },
+    {
       "id": "matching.poor",
       "when": {
         "all_of": [

@@ -5,6 +5,7 @@ from app.core.json_contracts import validate_contract
 from app.core.schemas import AnnPrediction, DimensionPrediction, OptimizeRequest
 from app.planning.action_catalog import get_action_catalog_payload
 from app.planning.command_compiler import compile_action_plan
+from app.planning.v2_command_contract import validate_command_package_v2
 
 
 def _request() -> OptimizeRequest:
@@ -72,7 +73,7 @@ def _ann() -> AnnPrediction:
 def test_action_catalog_validates_against_contract() -> None:
     payload = get_action_catalog_payload()
     validate_contract("action_catalog", payload)
-    assert payload["catalog_version"] == "v1"
+    assert payload["catalog_version"] == "v2"
     assert len(payload["actions"]) >= 15
 
 
@@ -116,7 +117,166 @@ def test_build_command_package_uses_phase1_compiler_path() -> None:
         iteration_index=2,
     )
 
-    assert command_package["schema_version"] == "cst_command_package.v1"
-    assert command_package["command_catalog_version"] == "v1"
+    assert command_package["schema_version"] == "cst_command_package.v2"
+    assert command_package["command_catalog_version"] == "v2"
     assert command_package["iteration_index"] == 2
     assert command_package["commands"][2]["command"] == "set_frequency_range"
+
+
+def test_v2_preflight_accepts_valid_alias_rich_package() -> None:
+    package = {
+        "schema_version": "cst_command_package.v2",
+        "command_catalog_version": "v2",
+        "session_id": "session-v2",
+        "trace_id": "trace-v2",
+        "design_id": "design-v2",
+        "iteration_index": 0,
+        "units": {"geometry": "mm", "frequency": "ghz"},
+        "predicted_dimensions": {},
+        "commands": [
+            {
+                "seq": 1,
+                "command": "new_component",
+                "params": {"name": "component1"},
+            },
+            {
+                "seq": 2,
+                "command": "define_extrude",
+                "params": {
+                    "name": "solid1",
+                    "points": [[0, 0], [10, 0], [10, 5]],
+                },
+            },
+            {
+                "seq": 3,
+                "command": "pick_end_point",
+                "params": {
+                    "component": "component1",
+                    "solid": "solid1",
+                    "endpoint_id": 1,
+                },
+            },
+            {
+                "seq": 4,
+                "command": "create_port",
+                "params": {
+                    "port_id": 1,
+                    "impedance_ohm": 50.0,
+                    "reference_mm": {"x": 0.0, "y": 0.0, "z": 0.0},
+                },
+            },
+        ],
+        "expected_exports": ["summary_metrics"],
+        "safety_checks": ["command_order_validated"],
+    }
+
+    validate_command_package_v2(package)
+
+
+def test_v2_preflight_rejects_unknown_command() -> None:
+    package = {
+        "schema_version": "cst_command_package.v2",
+        "command_catalog_version": "v2",
+        "session_id": "session-v2",
+        "trace_id": "trace-v2",
+        "design_id": "design-v2",
+        "iteration_index": 0,
+        "units": {"geometry": "mm", "frequency": "ghz"},
+        "predicted_dimensions": {},
+        "commands": [
+            {"seq": 1, "command": "not_a_real_v2_command", "params": {}},
+        ],
+        "expected_exports": [],
+        "safety_checks": [],
+    }
+
+    try:
+        validate_command_package_v2(package)
+        assert False, "expected unknown command to be rejected"
+    except ValueError as exc:
+        assert "not declared in strict V2 contract" in str(exc)
+
+
+def test_v2_preflight_rejects_missing_required_params() -> None:
+    package = {
+        "schema_version": "cst_command_package.v2",
+        "command_catalog_version": "v2",
+        "session_id": "session-v2",
+        "trace_id": "trace-v2",
+        "design_id": "design-v2",
+        "iteration_index": 0,
+        "units": {"geometry": "mm", "frequency": "ghz"},
+        "predicted_dimensions": {},
+        "commands": [
+            {
+                "seq": 1,
+                "command": "define_brick",
+                "params": {"name": "solid1", "xrange": [0, 1], "yrange": [0, 1]},
+            },
+        ],
+        "expected_exports": [],
+        "safety_checks": [],
+    }
+
+    try:
+        validate_command_package_v2(package)
+        assert False, "expected missing params to be rejected"
+    except ValueError as exc:
+        assert "missing required params" in str(exc)
+        assert "zrange" in str(exc)
+
+
+def test_v2_preflight_enforces_any_of_groups() -> None:
+    package = {
+        "schema_version": "cst_command_package.v2",
+        "command_catalog_version": "v2",
+        "session_id": "session-v2",
+        "trace_id": "trace-v2",
+        "design_id": "design-v2",
+        "iteration_index": 0,
+        "units": {"geometry": "mm", "frequency": "ghz"},
+        "predicted_dimensions": {},
+        "commands": [
+            {
+                "seq": 1,
+                "command": "create_port",
+                "params": {"port_id": 1, "impedance_ohm": 50.0},
+            },
+        ],
+        "expected_exports": [],
+        "safety_checks": [],
+    }
+
+    try:
+        validate_command_package_v2(package)
+        assert False, "expected any_of rule to be enforced"
+    except ValueError as exc:
+        assert "requires one of parameter groups" in str(exc)
+
+
+def test_v2_preflight_enforces_non_empty_points_lists() -> None:
+    package = {
+        "schema_version": "cst_command_package.v2",
+        "command_catalog_version": "v2",
+        "session_id": "session-v2",
+        "trace_id": "trace-v2",
+        "design_id": "design-v2",
+        "iteration_index": 0,
+        "units": {"geometry": "mm", "frequency": "ghz"},
+        "predicted_dimensions": {},
+        "commands": [
+            {
+                "seq": 1,
+                "command": "define_rotate",
+                "params": {"name": "rot1", "points": []},
+            },
+        ],
+        "expected_exports": [],
+        "safety_checks": [],
+    }
+
+    try:
+        validate_command_package_v2(package)
+        assert False, "expected non-empty points list rule to be enforced"
+    except ValueError as exc:
+        assert "non-empty list param 'points'" in str(exc)

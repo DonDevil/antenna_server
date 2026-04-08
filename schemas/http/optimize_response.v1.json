@@ -82,6 +82,15 @@
           "minimum": 0.0,
           "maximum": 1.0
         },
+        "recipe_name": {
+          "type": ["string", "null"]
+        },
+        "patch_shape": {
+          "type": ["string", "null"]
+        },
+        "optimizer_hint": {
+          "type": ["string", "null"]
+        },
         "dimensions": {
           "$ref": "#/$defs/dimensions"
         }
@@ -145,6 +154,10 @@
           "type": ["string", "null"]
         }
       }
+    },
+    "objective_state": {
+      "type": ["object", "null"],
+      "additionalProperties": true
     },
     "clarification": {
       "type": ["object", "null"],
@@ -224,6 +237,9 @@
         },
         "patch_height_mm": {
           "type": "number"
+        },
+        "patch_radius_mm": {
+          "type": ["number", "null"]
         },
         "substrate_length_mm": {
           "type": "number"

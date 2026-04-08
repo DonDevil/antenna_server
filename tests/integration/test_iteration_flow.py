@@ -143,6 +143,8 @@ def test_optimize_feedback_refine_complete_and_query(tmp_path: Path) -> None:
     optimize_response = client.post("/api/v1/optimize", json=_optimize_payload())
     assert optimize_response.status_code == 200
     optimize_data = optimize_response.json()
+    assert isinstance(optimize_data["objective_state"], dict)
+    assert optimize_data["objective_state"]["primary"]["s11"]["status"] == "pending"
     assert len(optimize_data["warnings"]) >= 3
     assert "surrogate_confidence=" in optimize_data["warnings"][0]
     assert "surrogate_residuals:" in optimize_data["warnings"][1]
@@ -177,6 +179,8 @@ def test_optimize_feedback_refine_complete_and_query(tmp_path: Path) -> None:
     assert feedback_1_data["iteration_index"] == 1
     assert feedback_1_data["decision_reason"] == "apply_refinement_strategy_due_to_unmet_acceptance"
     assert feedback_1_data["stop_reason"] is None
+    assert isinstance(feedback_1_data["objective_state"], dict)
+    assert feedback_1_data["objective_state"]["overall_status"] == "needs_refinement"
     assert isinstance(feedback_1_data["planning_summary"], dict)
     assert isinstance(feedback_1_data["planning_summary"]["selected_action"], str)
     assert isinstance(feedback_1_data["planning_summary"]["decision_source"], str)
@@ -216,7 +220,7 @@ def test_optimize_feedback_refine_complete_and_query(tmp_path: Path) -> None:
     manifest = stored_session["artifact_manifest"]
     assert manifest["manifest_version"] == "artifact_manifest.v1"
     assert manifest["request_schema_version"] == "optimize_request.v1"
-    assert manifest["command_schema_version"] == "cst_command_package.v1"
+    assert manifest["command_schema_version"] == "cst_command_package.v2"
     assert manifest["ann_model_version"] == "v1"
     assert manifest["latest_iteration_index"] == 1
     assert isinstance(manifest["latest_command_package_checksum_sha256"], str)

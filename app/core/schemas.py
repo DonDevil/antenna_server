@@ -21,6 +21,9 @@ class TargetSpec(BaseModel):
     frequency_ghz: float = Field(gt=0)
     bandwidth_mhz: float = Field(gt=0)
     antenna_family: str = "amc_patch"
+    patch_shape: Literal["auto", "rectangular", "circular"] = "auto"
+    feed_type: Literal["auto", "edge", "inset", "coaxial"] = "auto"
+    polarization: Literal["linear", "circular", "dual", "unspecified"] = "unspecified"
 
 
 class DesignConstraints(BaseModel):
@@ -41,6 +44,7 @@ class AcceptanceSpec(BaseModel):
     minimum_bandwidth_mhz: float = 10.0
     maximum_vswr: float = 2.0
     minimum_gain_dbi: float = 0.0
+    minimum_return_loss_db: float = -10.0
 
 
 class OptimizationPolicy(BaseModel):
@@ -56,6 +60,7 @@ class RuntimePreferences(BaseModel):
     persist_artifacts: bool = True
     llm_temperature: float = Field(default=0.0, ge=0.0, le=1.0)
     timeout_budget_sec: int = Field(default=300, ge=30, le=3600)
+    priority: Literal["normal", "research"] = "normal"
 
 
 class ClientCapabilities(BaseModel):
@@ -66,6 +71,25 @@ class ClientCapabilities(BaseModel):
     export_formats: list[Literal["json", "csv", "txt"]] = Field(default_factory=lambda: ["json"])
 
 
+class PrimaryObjectiveTargets(BaseModel):
+    s11: Literal["minimize", "hold"] = "minimize"
+    bandwidth: Literal["maximize", "hold"] = "maximize"
+    gain: Literal["maximize", "hold"] = "maximize"
+    efficiency: Literal["maximize", "hold"] = "maximize"
+
+
+class SecondaryObjectiveTargets(BaseModel):
+    zin_target: str | None = "50+j0"
+    axial_ratio: str | None = None
+    sll: Literal["minimize", "hold", "ignore"] = "minimize"
+    front_to_back: Literal["maximize", "hold", "ignore"] = "maximize"
+
+
+class OptimizationTargets(BaseModel):
+    primary: PrimaryObjectiveTargets = Field(default_factory=PrimaryObjectiveTargets)
+    secondary: SecondaryObjectiveTargets = Field(default_factory=SecondaryObjectiveTargets)
+
+
 class OptimizeRequest(BaseModel):
     schema_version: str = "optimize_request.v1"
     session_id: str | None = None
@@ -73,6 +97,7 @@ class OptimizeRequest(BaseModel):
     target_spec: TargetSpec
     design_constraints: DesignConstraints
     optimization_policy: OptimizationPolicy = Field(default_factory=OptimizationPolicy)
+    optimization_targets: OptimizationTargets = Field(default_factory=OptimizationTargets)
     runtime_preferences: RuntimePreferences = Field(default_factory=RuntimePreferences)
     client_capabilities: ClientCapabilities
 
@@ -81,6 +106,7 @@ class DimensionPrediction(BaseModel):
     patch_length_mm: float
     patch_width_mm: float
     patch_height_mm: float
+    patch_radius_mm: float | None = None
     substrate_length_mm: float
     substrate_width_mm: float
     substrate_height_mm: float
@@ -94,6 +120,9 @@ class AnnPrediction(BaseModel):
     ann_model_version: str
     confidence: float = Field(ge=0.0, le=1.0)
     dimensions: DimensionPrediction
+    recipe_name: str | None = None
+    patch_shape: str | None = None
+    optimizer_hint: str | None = None
 
 
 class OptimizeResponse(BaseModel):
@@ -105,5 +134,6 @@ class OptimizeResponse(BaseModel):
     ann_prediction: AnnPrediction | None = None
     command_package: dict | None = None
     clarification: dict | None = None
+    objective_state: dict | None = None
     warnings: list[str] = Field(default_factory=list)
     error: dict | None = None

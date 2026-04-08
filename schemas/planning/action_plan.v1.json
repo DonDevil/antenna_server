@@ -96,7 +96,8 @@
         "feed_length_mm": {"type": "number", "exclusiveMinimum": 0.0},
         "feed_width_mm": {"type": "number", "exclusiveMinimum": 0.0},
         "feed_offset_x_mm": {"type": "number"},
-        "feed_offset_y_mm": {"type": "number"}
+        "feed_offset_y_mm": {"type": "number"},
+        "patch_radius_mm": {"type": ["number", "null"], "exclusiveMinimum": 0.0}
       }
     },
     "predicted_metrics": {
@@ -108,6 +109,10 @@
         "gain_dbi": {"type": "number"},
         "vswr": {"type": "number"}
       }
+    },
+    "design_recipe": {
+      "type": "object",
+      "additionalProperties": true
     },
     "actions": {
       "type": "array",
@@ -173,6 +178,9 @@
             "set_units",
             "set_frequency_range",
             "define_material",
+            "create_component",
+            "define_brick",
+            "define_cylinder",
             "create_substrate",
             "create_ground_plane",
             "create_patch",

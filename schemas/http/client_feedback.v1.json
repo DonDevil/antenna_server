@@ -74,6 +74,30 @@
       "minimum": -100.0,
       "maximum": 100.0
     },
+    "actual_efficiency": {
+      "type": "number",
+      "minimum": 0.0,
+      "maximum": 1.0
+    },
+    "actual_input_impedance": {
+      "type": "string",
+      "maxLength": 100
+    },
+    "actual_axial_ratio_db": {
+      "type": "number",
+      "minimum": 0.0,
+      "maximum": 50.0
+    },
+    "actual_sll_db": {
+      "type": "number",
+      "minimum": -100.0,
+      "maximum": 100.0
+    },
+    "actual_front_to_back_db": {
+      "type": "number",
+      "minimum": -100.0,
+      "maximum": 100.0
+    },
     "notes": {
       "type": "string",
       "maxLength": 2000

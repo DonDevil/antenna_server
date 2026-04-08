@@ -1,0 +1,129 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "cst_command_package.v2",
+  "title": "CST Command Package v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "command_catalog_version",
+    "session_id",
+    "trace_id",
+    "design_id",
+    "iteration_index",
+    "units",
+    "predicted_dimensions",
+    "commands",
+    "expected_exports",
+    "safety_checks"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "cst_command_package.v2"
+    },
+    "command_catalog_version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "session_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "trace_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "design_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "iteration_index": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "units": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["geometry", "frequency"],
+      "properties": {
+        "geometry": {
+          "type": "string",
+          "enum": ["mm"]
+        },
+        "frequency": {
+          "type": "string",
+          "enum": ["ghz"]
+        }
+      }
+    },
+    "predicted_dimensions": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "predicted_metrics": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "design_recipe": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "commands": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/command"
+      }
+    },
+    "expected_exports": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": ["s_parameters", "farfield", "summary_metrics"]
+      }
+    },
+    "safety_checks": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "dimensions_within_constraints",
+          "command_order_validated",
+          "materials_whitelisted",
+          "client_capability_compatible",
+          "simulation_timeout_bounded"
+        ]
+      }
+    }
+  },
+  "$defs": {
+    "command": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["seq", "command", "params"],
+      "properties": {
+        "seq": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "command": {
+          "type": "string",
+          "minLength": 1
+        },
+        "params": {
+          "type": "object"
+        },
+        "on_failure": {
+          "type": "string",
+          "enum": ["abort", "retry_once", "continue"],
+          "default": "abort"
+        },
+        "checksum_scope": {
+          "type": "string",
+          "minLength": 1,
+          "default": "command"
+        }
+      }
+    }
+  }
+}

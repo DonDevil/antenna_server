@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import math
 import sys
 from pathlib import Path
 
@@ -11,38 +10,77 @@ ROOT_DIR = Path(__file__).resolve().parent.parent
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
+from app.ann.features import build_ann_feature_map
+from app.antenna.recipes import generate_recipe
+from app.core.schemas import (
+    ClientCapabilities,
+    DesignConstraints,
+    OptimizationPolicy,
+    OptimizeRequest,
+    RuntimePreferences,
+    TargetSpec,
+)
 from config import BOUNDS, DATA_SETTINGS
 
 
 def synthesize_row(rng: np.random.Generator) -> dict:
     f = float(rng.uniform(*BOUNDS.frequency_ghz))
     bw = float(rng.uniform(20.0, 500.0))
+    family = str(rng.choice(["microstrip_patch", "amc_patch", "wban_patch"], p=[0.5, 0.3, 0.2]))
+    shape = str(rng.choice(["rectangular", "circular"], p=[0.75, 0.25])) if family == "microstrip_patch" else "rectangular"
+    substrate = {
+        "microstrip_patch": "Rogers RT/duroid 5880",
+        "amc_patch": "FR-4 (lossy)",
+        "wban_patch": "Rogers RO3003",
+    }[family]
+    min_gain = float(rng.uniform(0.0, 6.0))
+    max_vswr = float(rng.uniform(1.6, 2.5))
 
-    eps_eff = 4.2
-    c = 3e8
-    patch_length_mm = (c / (2 * (f * 1e9) * math.sqrt(eps_eff))) * 1e3
-    patch_width_mm = patch_length_mm * float(rng.uniform(1.05, 1.3))
-    substrate_height_mm = float(rng.uniform(*BOUNDS.substrate_height_mm))
-    patch_height_mm = 0.035
-    substrate_length_mm = patch_length_mm + 6 * substrate_height_mm
-    substrate_width_mm = patch_width_mm + 6 * substrate_height_mm
-    feed_length_mm = patch_length_mm * float(rng.uniform(0.3, 0.6))
-    feed_width_mm = max(0.5, min(8.0, bw / 120.0))
+    request = OptimizeRequest(
+        schema_version="optimize_request.v1",
+        user_request=f"Design a {shape} {family} antenna at {f:.3f} GHz",
+        target_spec=TargetSpec(
+            frequency_ghz=f,
+            bandwidth_mhz=bw,
+            antenna_family=family,
+            patch_shape=shape,
+        ),
+        design_constraints=DesignConstraints(
+            allowed_materials=["Copper (annealed)"],
+            allowed_substrates=[substrate],
+        ),
+        optimization_policy=OptimizationPolicy(
+            acceptance={
+                "center_tolerance_mhz": 20.0,
+                "minimum_bandwidth_mhz": bw,
+                "maximum_vswr": max_vswr,
+                "minimum_gain_dbi": min_gain,
+            }
+        ),
+        runtime_preferences=RuntimePreferences(),
+        client_capabilities=ClientCapabilities(),
+    )
 
-    return {
+    recipe = generate_recipe(request)
+    dims = dict(recipe["dimensions"])
+    for name in (
+        "patch_length_mm",
+        "patch_width_mm",
+        "substrate_length_mm",
+        "substrate_width_mm",
+        "feed_length_mm",
+        "feed_width_mm",
+    ):
+        dims[name] = float(dims[name]) * float(rng.uniform(0.97, 1.03))
+    dims["feed_offset_y_mm"] = float(dims["feed_offset_y_mm"]) + float(rng.uniform(-0.3, 0.3))
+
+    row = {
         "frequency_ghz": f,
         "bandwidth_mhz": bw,
-        "patch_length_mm": patch_length_mm,
-        "patch_width_mm": patch_width_mm,
-        "patch_height_mm": patch_height_mm,
-        "substrate_length_mm": substrate_length_mm,
-        "substrate_width_mm": substrate_width_mm,
-        "substrate_height_mm": substrate_height_mm,
-        "feed_length_mm": feed_length_mm,
-        "feed_width_mm": feed_width_mm,
-        "feed_offset_x_mm": 0.0,
-        "feed_offset_y_mm": -patch_length_mm / 4,
+        **build_ann_feature_map(request, recipe),
+        **dims,
     }
+    return row
 
 
 def main() -> None:

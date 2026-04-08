@@ -35,7 +35,7 @@ class OllamaSettings:
 class PlannerSettings:
     mode: Literal["fixed", "dynamic"] = "dynamic"
     dynamic_enabled: bool = True
-    command_catalog_version: str = "v1"
+    command_catalog_version: str = "v2"
     action_plan_version: str = "v1"
     llm_enabled_for_intent: bool = True
     llm_enabled_for_refinement: bool = True
@@ -50,7 +50,23 @@ class AnnSettings:
     model_version: str = "v1"
     checkpoint_path: Path = MODELS_DIR / "ann" / "v1" / "inverse_ann.pt"
     metadata_path: Path = MODELS_DIR / "ann" / "v1" / "metadata.json"
-    input_columns: tuple[str, ...] = ("frequency_ghz", "bandwidth_mhz")
+    input_columns: tuple[str, ...] = (
+        "frequency_ghz",
+        "bandwidth_mhz",
+        "substrate_epsilon_r",
+        "substrate_height_mm",
+        "minimum_gain_dbi",
+        "maximum_vswr",
+        "priority_s11_minimize",
+        "priority_bandwidth_maximize",
+        "priority_gain_maximize",
+        "priority_efficiency_maximize",
+        "family_is_amc_patch",
+        "family_is_microstrip_patch",
+        "family_is_wban_patch",
+        "shape_is_rectangular",
+        "shape_is_circular",
+    )
     output_columns: tuple[str, ...] = (
         "patch_length_mm",
         "patch_width_mm",

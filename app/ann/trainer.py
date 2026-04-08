@@ -29,8 +29,33 @@ def _standardize(x: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     return (x - mean) / std, mean, std
 
 
+def _ensure_feature_columns(df: pd.DataFrame) -> pd.DataFrame:
+    enriched = df.copy()
+    defaults: dict[str, float] = {
+        "substrate_epsilon_r": 4.4,
+        "minimum_gain_dbi": 0.0,
+        "maximum_vswr": 2.0,
+        "priority_s11_minimize": 1.0,
+        "priority_bandwidth_maximize": 1.0,
+        "priority_gain_maximize": 1.0,
+        "priority_efficiency_maximize": 1.0,
+        "family_is_amc_patch": 0.0,
+        "family_is_microstrip_patch": 1.0,
+        "family_is_wban_patch": 0.0,
+        "shape_is_rectangular": 1.0,
+        "shape_is_circular": 0.0,
+    }
+    for column in ANN_SETTINGS.input_columns:
+        if column in enriched.columns:
+            continue
+        if column == "substrate_height_mm" and "substrate_height_mm" in enriched.columns:
+            continue
+        enriched[column] = defaults.get(column, 0.0)
+    return enriched
+
+
 def train_ann(validated_csv: Path, checkpoint_path: Path, metadata_path: Path, epochs: int = 200) -> TrainingArtifacts:
-    df = pd.read_csv(validated_csv)
+    df = _ensure_feature_columns(pd.read_csv(validated_csv))
     if len(df) < DATA_SETTINGS.min_rows_for_training:
         raise ValueError(
             f"Need at least {DATA_SETTINGS.min_rows_for_training} validated rows for training, found {len(df)}"
@@ -73,6 +98,8 @@ def train_ann(validated_csv: Path, checkpoint_path: Path, metadata_path: Path, e
 
     metadata = {
         "model_version": ANN_SETTINGS.model_version,
+        "feature_schema_version": "ann_recipe_features.v2",
+        "prediction_mode": "absolute_blend",
         "input_columns": list(ANN_SETTINGS.input_columns),
         "output_columns": list(ANN_SETTINGS.output_columns),
         "x_mean": x_mean.tolist(),

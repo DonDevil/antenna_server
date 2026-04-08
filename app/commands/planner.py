@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any, cast
 
+from app.antenna.recipes import generate_recipe
 from app.core.json_contracts import validate_contract
 from app.core.schemas import AnnPrediction, OptimizeRequest
 from app.planning.command_compiler import compile_action_plan
@@ -26,10 +27,17 @@ def build_fixed_action_plan(
     max_sim_timeout = int(req_any.client_capabilities.max_simulation_timeout_sec)
     supports_farfield = bool(req_any.client_capabilities.supports_farfield_export)
 
+    recipe = generate_recipe(request)
+    recipe_dims = cast(dict[str, Any], recipe["dimensions"])
+    patch_radius = getattr(ann_any.dimensions, "patch_radius_mm", None)
+    if patch_radius is None:
+        patch_radius = recipe_dims.get("patch_radius_mm")
+
     dims = {
         "patch_length_mm": float(ann_any.dimensions.patch_length_mm),
         "patch_width_mm": float(ann_any.dimensions.patch_width_mm),
         "patch_height_mm": float(ann_any.dimensions.patch_height_mm),
+        "patch_radius_mm": float(patch_radius if patch_radius is not None else (float(ann_any.dimensions.patch_width_mm) / 2.0)),
         "substrate_length_mm": float(ann_any.dimensions.substrate_length_mm),
         "substrate_width_mm": float(ann_any.dimensions.substrate_width_mm),
         "substrate_height_mm": float(ann_any.dimensions.substrate_height_mm),
@@ -38,6 +46,56 @@ def build_fixed_action_plan(
         "feed_offset_x_mm": float(ann_any.dimensions.feed_offset_x_mm),
         "feed_offset_y_mm": float(ann_any.dimensions.feed_offset_y_mm),
     }
+    patch_shape = str(recipe.get("patch_shape", getattr(req_any.target_spec, "patch_shape", "rectangular")))
+    component_name = "antenna"
+    substrate_x_half = dims["substrate_width_mm"] / 2.0
+    substrate_y_half = dims["substrate_length_mm"] / 2.0
+    patch_x_half = dims["patch_width_mm"] / 2.0
+    patch_y_half = dims["patch_length_mm"] / 2.0
+    feed_half_width = dims["feed_width_mm"] / 2.0
+    feed_y_min = min(dims["feed_offset_y_mm"] - dims["feed_length_mm"], dims["feed_offset_y_mm"])
+    feed_y_max = max(dims["feed_offset_y_mm"] - dims["feed_length_mm"], dims["feed_offset_y_mm"])
+    patch_z_min = dims["substrate_height_mm"]
+    patch_z_max = dims["substrate_height_mm"] + dims["patch_height_mm"]
+
+    if patch_shape == "circular":
+        patch_action = {
+            "seq": 9,
+            "action": "define_cylinder",
+            "command": "define_cylinder",
+            "params": {
+                "name": "patch",
+                "component": component_name,
+                "material": allowed_material,
+                "axis": "z",
+                "center": [0.0, 0.0],
+                "outer_radius": dims["patch_radius_mm"],
+                "inner_radius": 0.0,
+                "zrange": [patch_z_min, patch_z_max],
+            },
+            "on_failure": "abort",
+            "checksum_scope": "geometry",
+            "rationale_tags": ["ann_baseline_geometry", "patch_shape:circular"],
+            "expected_effects": ["patch_created"],
+        }
+    else:
+        patch_action = {
+            "seq": 9,
+            "action": "define_brick",
+            "command": "define_brick",
+            "params": {
+                "name": "patch",
+                "component": component_name,
+                "material": allowed_material,
+                "xrange": [-patch_x_half, patch_x_half],
+                "yrange": [-patch_y_half, patch_y_half],
+                "zrange": [patch_z_min, patch_z_max],
+            },
+            "on_failure": "abort",
+            "checksum_scope": "geometry",
+            "rationale_tags": ["ann_baseline_geometry", "patch_shape:rectangular"],
+            "expected_effects": ["patch_created"],
+        }
 
     actions: list[dict[str, Any]] = [
         {
@@ -95,79 +153,68 @@ def build_fixed_action_plan(
         },
         {
             "seq": 6,
-            "action": "create_substrate",
-            "command": "create_substrate",
-            "params": {
-                "name": "substrate",
-                "material": allowed_substrate,
-                "length_mm": dims["substrate_length_mm"],
-                "width_mm": dims["substrate_width_mm"],
-                "height_mm": dims["substrate_height_mm"],
-                "origin_mm": {"x": 0.0, "y": 0.0, "z": 0.0},
-            },
+            "action": "create_component",
+            "command": "create_component",
+            "params": {"component": component_name},
             "on_failure": "abort",
             "checksum_scope": "geometry",
-            "rationale_tags": ["ann_baseline_geometry"],
-            "expected_effects": ["substrate_created"],
+            "rationale_tags": ["baseline_setup", "component_scope"],
+            "expected_effects": ["component_initialized"],
         },
         {
             "seq": 7,
-            "action": "create_ground_plane",
-            "command": "create_ground_plane",
+            "action": "define_brick",
+            "command": "define_brick",
             "params": {
-                "name": "ground",
-                "material": allowed_material,
-                "length_mm": dims["substrate_length_mm"],
-                "width_mm": dims["substrate_width_mm"],
-                "thickness_mm": dims["patch_height_mm"],
-                "z_mm": 0.0,
+                "name": "substrate",
+                "component": component_name,
+                "material": allowed_substrate,
+                "xrange": [-substrate_x_half, substrate_x_half],
+                "yrange": [-substrate_y_half, substrate_y_half],
+                "zrange": [0.0, dims["substrate_height_mm"]],
             },
             "on_failure": "abort",
             "checksum_scope": "geometry",
-            "rationale_tags": ["ann_baseline_geometry"],
-            "expected_effects": ["ground_created"],
+            "rationale_tags": ["ann_baseline_geometry", "substrate_volume"],
+            "expected_effects": ["substrate_created"],
         },
         {
             "seq": 8,
-            "action": "create_patch",
-            "command": "create_patch",
+            "action": "define_brick",
+            "command": "define_brick",
             "params": {
-                "name": "patch",
+                "name": "ground",
+                "component": component_name,
                 "material": allowed_material,
-                "length_mm": dims["patch_length_mm"],
-                "width_mm": dims["patch_width_mm"],
-                "thickness_mm": dims["patch_height_mm"],
-                "center_mm": {"x": 0.0, "y": 0.0, "z": dims["substrate_height_mm"]},
+                "xrange": [-substrate_x_half, substrate_x_half],
+                "yrange": [-substrate_y_half, substrate_y_half],
+                "zrange": [-dims["patch_height_mm"], 0.0],
             },
             "on_failure": "abort",
             "checksum_scope": "geometry",
-            "rationale_tags": ["ann_baseline_geometry"],
-            "expected_effects": ["patch_created"],
+            "rationale_tags": ["ann_baseline_geometry", "ground_reference"],
+            "expected_effects": ["ground_created"],
         },
+        patch_action,
         {
-            "seq": 9,
-            "action": "create_feedline",
-            "command": "create_feedline",
+            "seq": 10,
+            "action": "define_brick",
+            "command": "define_brick",
             "params": {
                 "name": "feed",
+                "component": component_name,
                 "material": allowed_material,
-                "length_mm": dims["feed_length_mm"],
-                "width_mm": dims["feed_width_mm"],
-                "thickness_mm": dims["patch_height_mm"],
-                "start_mm": {"x": dims["feed_offset_x_mm"], "y": dims["feed_offset_y_mm"], "z": dims["substrate_height_mm"]},
-                "end_mm": {
-                    "x": dims["feed_offset_x_mm"],
-                    "y": dims["feed_offset_y_mm"] - dims["feed_length_mm"],
-                    "z": dims["substrate_height_mm"],
-                },
+                "xrange": [dims["feed_offset_x_mm"] - feed_half_width, dims["feed_offset_x_mm"] + feed_half_width],
+                "yrange": [feed_y_min, feed_y_max],
+                "zrange": [patch_z_min, patch_z_max],
             },
             "on_failure": "abort",
             "checksum_scope": "geometry",
-            "rationale_tags": ["ann_baseline_geometry"],
+            "rationale_tags": ["ann_baseline_geometry", "feed_matching"],
             "expected_effects": ["feedline_created"],
         },
         {
-            "seq": 10,
+            "seq": 11,
             "action": "create_port",
             "command": "create_port",
             "params": {"port_id": 1, "port_type": "discrete", "impedance_ohm": 50.0, "reference_mm": {"x": 0.0, "y": 0.0, "z": 0.0}},
@@ -177,7 +224,7 @@ def build_fixed_action_plan(
             "expected_effects": ["port_defined"],
         },
         {
-            "seq": 11,
+            "seq": 12,
             "action": "set_boundary",
             "command": "set_boundary",
             "params": {"boundary_type": "open_add_space", "padding_mm": 15.0},
@@ -187,7 +234,7 @@ def build_fixed_action_plan(
             "expected_effects": ["boundary_set"],
         },
         {
-            "seq": 12,
+            "seq": 13,
             "action": "set_solver",
             "command": "set_solver",
             "params": {"solver_type": "time_domain", "mesh_cells_per_wavelength": 20},
@@ -197,7 +244,7 @@ def build_fixed_action_plan(
             "expected_effects": ["solver_ready"],
         },
         {
-            "seq": 14,
+            "seq": 15,
             "action": "run_simulation",
             "command": "run_simulation",
             "params": {"timeout_sec": min(max_sim_timeout, 900)},
@@ -207,7 +254,7 @@ def build_fixed_action_plan(
             "expected_effects": ["simulation_started"],
         },
         {
-            "seq": 15,
+            "seq": 16,
             "action": "export_s_parameters",
             "command": "export_s_parameters",
             "params": {"format": export_format, "destination_hint": "s11"},
@@ -217,7 +264,7 @@ def build_fixed_action_plan(
             "expected_effects": ["s_parameters_available"],
         },
         {
-            "seq": 16,
+            "seq": 17,
             "action": "extract_summary_metrics",
             "command": "extract_summary_metrics",
             "params": {"metrics": ["center_frequency_ghz", "bandwidth_mhz", "return_loss_db", "vswr", "gain_dbi"]},
@@ -230,9 +277,9 @@ def build_fixed_action_plan(
 
     if supports_farfield:
         actions.insert(
-            12,
+            13,
             {
-                "seq": 13,
+                "seq": 14,
                 "action": "add_farfield_monitor",
                 "command": "add_farfield_monitor",
                 "params": {
@@ -247,7 +294,7 @@ def build_fixed_action_plan(
         )
         actions.append(
             {
-                "seq": 17,
+                "seq": 18,
                 "action": "export_farfield",
                 "command": "export_farfield",
                 "params": {
@@ -276,6 +323,14 @@ def build_fixed_action_plan(
         "predicted_metrics": {
             "center_frequency_ghz": target_frequency,
             "bandwidth_mhz": target_bandwidth,
+        },
+        "design_recipe": {
+            "family": str(req_any.target_spec.antenna_family),
+            "patch_shape": patch_shape,
+            "feed_type": str(getattr(req_any.target_spec, "feed_type", "auto")),
+            "recipe_name": str(recipe.get("recipe_name", "unknown_recipe")),
+            "substrate": recipe.get("substrate"),
+            "notes": recipe.get("notes", []),
         },
         "actions": actions,
         "expected_exports": ["s_parameters", "summary_metrics"] + (["farfield"] if supports_farfield else []),

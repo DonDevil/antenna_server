@@ -53,6 +53,16 @@
           ],
           "default": "amc_patch"
         },
+        "patch_shape": {
+          "type": "string",
+          "enum": ["auto", "rectangular", "circular"],
+          "default": "auto"
+        },
+        "feed_type": {
+          "type": "string",
+          "enum": ["auto", "edge", "inset", "coaxial"],
+          "default": "auto"
+        },
         "center_tolerance_mhz": {
           "type": "number",
           "minimum": 0.0,
@@ -205,6 +215,32 @@
             "return_error",
             "require_user_confirmation"
           ]
+        }
+      }
+    },
+    "optimization_targets": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "primary": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "s11": {"type": "string", "enum": ["minimize", "hold"]},
+            "bandwidth": {"type": "string", "enum": ["maximize", "hold"]},
+            "gain": {"type": "string", "enum": ["maximize", "hold"]},
+            "efficiency": {"type": "string", "enum": ["maximize", "hold"]}
+          }
+        },
+        "secondary": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "zin_target": {"type": ["string", "null"]},
+            "axial_ratio": {"type": ["string", "null"]},
+            "sll": {"type": "string", "enum": ["minimize", "hold", "ignore"]},
+            "front_to_back": {"type": "string", "enum": ["maximize", "hold", "ignore"]}
+          }
         }
       }
     },

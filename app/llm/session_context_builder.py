@@ -30,13 +30,27 @@ def build_refinement_context(
             }
         )
 
+    request_payload = session.get("request", {})
+    if not isinstance(request_payload, dict):
+        request_payload = {}
+
     return {
         "session_id": session.get("session_id"),
         "iteration": session.get("current_iteration"),
-        "target_spec": session.get("request", {}).get("target_spec", {}),
+        "target_spec": request_payload.get("target_spec", {}),
+        "objective_targets": request_payload.get("optimization_targets", {}),
+        "objective_state": session.get("objective_state", features.get("objective_state", {})),
+        "current_dimensions": session.get("current_ann_prediction", {}).get("dimensions", {}),
+        "feedback_state": {
+            "frequency_state": features.get("frequency_state"),
+            "bandwidth_state": features.get("bandwidth_state"),
+            "matching_state": features.get("matching_state"),
+            "gain_state": features.get("gain_state"),
+        },
         "features": {
             "freq_error_mhz": features.get("freq_error_mhz"),
             "bandwidth_gap_mhz": features.get("bandwidth_gap_mhz"),
+            "return_loss_gap_db": features.get("return_loss_gap_db"),
             "vswr_gap": features.get("vswr_gap"),
             "gain_gap": features.get("gain_gap"),
             "severity": features.get("severity"),

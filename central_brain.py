@@ -8,6 +8,7 @@ from app.ann.predictor import AnnPredictor
 from app.commands.planner import build_command_package
 from app.core.feedback_features import derive_feedback_features
 from app.core.family_registry import apply_family_profile
+from app.core.objectives import build_initial_objective_state, evaluate_objective_state
 from app.core.refinement import evaluate_acceptance, refine_prediction_with_strategy
 from app.core.schemas import AnnPrediction, OptimizeRequest, OptimizeResponse
 from app.core.session_store import SessionStore
@@ -47,8 +48,9 @@ class CentralBrain:
         trace_id = str(uuid.uuid4())
         normalized_request = apply_family_profile(request)
         intent_summary = summarize_user_intent(normalized_request.user_request)
+        initial_objective_state = build_initial_objective_state(normalized_request)
 
-        ann = self.ann_predictor.predict(normalized_request.target_spec)
+        ann = self.ann_predictor.predict(normalized_request)
         surrogate = validate_with_surrogate(normalized_request, ann)
 
         if not bool(surrogate["accepted"]):
@@ -68,6 +70,7 @@ class CentralBrain:
                     initial_status="clarification_required",
                     stop_reason=stop_reason,
                     decision_reason="surrogate_confidence_below_threshold_requires_confirmation",
+                    objective_state=initial_objective_state,
                 )
                 return OptimizeResponse(
                     status="clarification_required",
@@ -75,6 +78,7 @@ class CentralBrain:
                     trace_id=trace_id,
                     current_stage="clarification_required",
                     ann_prediction=ann,
+                    objective_state=initial_objective_state,
                     warnings=self._surrogate_warnings(surrogate),
                     clarification={
                         "reason": "Surrogate confidence is below safety threshold for automatic execution.",
@@ -101,6 +105,7 @@ class CentralBrain:
                     initial_status="error",
                     stop_reason=stop_reason,
                     decision_reason="surrogate_confidence_below_threshold_rejected_by_policy",
+                    objective_state=initial_objective_state,
                 )
                 return OptimizeResponse(
                     status="error",
@@ -108,6 +113,7 @@ class CentralBrain:
                     trace_id=trace_id,
                     current_stage="failed",
                     ann_prediction=ann,
+                    objective_state=initial_objective_state,
                     warnings=self._surrogate_warnings(surrogate),
                     error={
                         "code": "LOW_SURROGATE_CONFIDENCE",
@@ -130,6 +136,7 @@ class CentralBrain:
             initial_status="accepted",
             stop_reason=None,
             decision_reason="family_profile_applied_and_surrogate_confidence_sufficient",
+            objective_state=initial_objective_state,
         )
         session = self.session_store.load(session_id)
         session["intent_summary"] = intent_summary
@@ -142,6 +149,7 @@ class CentralBrain:
             current_stage="planning_commands",
             ann_prediction=ann,
             command_package=command_package,
+            objective_state=initial_objective_state,
             warnings=self._surrogate_warnings(surrogate),
         )
 
@@ -218,6 +226,8 @@ class CentralBrain:
 
         current_ann = AnnPrediction.model_validate(session["current_ann_prediction"])
         evaluation = evaluate_acceptance(request, payload)
+        objective_state = evaluate_objective_state(request, payload, evaluation)
+        session["objective_state"] = objective_state
         decision_reason = "acceptance_criteria_not_met"
         stop_reason: str | None = None
         if bool(evaluation["accepted"]):
@@ -232,6 +242,7 @@ class CentralBrain:
             "stop_reason": stop_reason,
             "feedback": payload,
             "evaluation": evaluation,
+            "objective_state": objective_state,
         }
         session["history"].append(history_item)
 
@@ -257,6 +268,7 @@ class CentralBrain:
                 "decision_reason": "acceptance_criteria_met",
                 "stop_reason": "acceptance_criteria_met",
                 "evaluation": evaluation,
+                "objective_state": objective_state,
                 "message": "Acceptance criteria met. No further refinement needed.",
             }
 
@@ -284,6 +296,7 @@ class CentralBrain:
                 "decision_reason": "user_marked_done",
                 "stop_reason": "user_marked_done",
                 "evaluation": evaluation,
+                "objective_state": objective_state,
                 "message": "Session completed by explicit client request.",
             }
 
@@ -310,6 +323,7 @@ class CentralBrain:
                 "decision_reason": "max_iterations_reached_without_acceptance",
                 "stop_reason": "max_iterations_reached",
                 "evaluation": evaluation,
+                "objective_state": objective_state,
                 "message": "Max iterations reached before acceptance.",
             }
 
@@ -351,6 +365,7 @@ class CentralBrain:
                 "decision_reason": "apply_refinement_strategy_due_to_unmet_acceptance",
                 "stop_reason": None,
                 "feedback_features": features,
+                "objective_state": objective_state,
                 "planning_provenance": refinement_plan,
                 "ann_prediction": refined_ann.model_dump(mode="json"),
                 "command_package": next_command_package,
@@ -380,7 +395,9 @@ class CentralBrain:
                 "decision_source": refinement_plan.get("decision_source"),
                 "confidence": refinement_plan.get("confidence"),
                 "rule_id": refinement_plan.get("rule_id"),
+                "focus_area": objective_state.get("focus_area"),
             },
+            "objective_state": objective_state,
             "next_command_package": next_command_package,
             "message": "Generated refined command package for next iteration.",
         }

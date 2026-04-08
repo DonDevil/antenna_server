@@ -46,6 +46,7 @@ class SessionStore:
         initial_status: str = "accepted",
         stop_reason: str | None = None,
         decision_reason: str = "initial_plan_created",
+        objective_state: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         now = datetime.now(timezone.utc).isoformat()
         command_checksum = self.payload_checksum(command_package) if command_package is not None else None
@@ -64,6 +65,8 @@ class SessionStore:
             "current_ann_prediction": ann_payload,
             "current_surrogate_validation": surrogate_validation,
             "current_command_package": command_package,
+            "objective_targets": request_payload.get("optimization_targets", {}),
+            "objective_state": objective_state or {},
             "policy_runtime": default_policy_runtime_state(),
             "artifact_manifest": {
                 "manifest_version": "artifact_manifest.v1",
@@ -81,6 +84,7 @@ class SessionStore:
                 "ann_metadata_path": str(ANN_SETTINGS.metadata_path),
                 "context_bundle_version": "context_bundle.v1",
                 "acceptance_policy_snapshot": request_payload.get("optimization_policy", {}).get("acceptance", {}),
+                "objective_targets_snapshot": request_payload.get("optimization_targets", {}),
                 "client_capability_profile": request_payload.get("client_capabilities", {}),
                 "latest_iteration_index": 0,
                 "latest_command_package_checksum_sha256": command_checksum,
