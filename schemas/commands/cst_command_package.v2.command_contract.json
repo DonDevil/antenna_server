@@ -13,17 +13,27 @@
     "define_material": {
       "required_params": ["name", "kind"]
     },
+    "define_parameter": {
+      "required_params": ["name", "value"]
+    },
+    "update_parameter": {
+      "required_params": ["name", "value"]
+    },
+    "set_parameter": {
+      "required_params": ["name", "value"]
+    },
+    "rebuild_model": {},
     "create_substrate": {
-      "required_params": ["name", "material", "length_mm", "width_mm", "height_mm", "origin_mm"]
+      "required_params": ["name", "component", "material", "length_mm", "width_mm", "height_mm", "origin_mm"]
     },
     "create_ground_plane": {
-      "required_params": ["name", "material", "length_mm", "width_mm", "thickness_mm", "z_mm"]
+      "required_params": ["name", "component", "material", "length_mm", "width_mm", "thickness_mm", "z_mm"]
     },
     "create_patch": {
-      "required_params": ["name", "material", "center_mm", "length_mm", "width_mm", "thickness_mm"]
+      "required_params": ["name", "component", "material", "center_mm", "length_mm", "width_mm", "thickness_mm"]
     },
     "create_feedline": {
-      "required_params": ["name", "material", "start_mm", "end_mm", "width_mm", "thickness_mm"]
+      "required_params": ["name", "component", "material", "start_mm", "end_mm", "width_mm", "thickness_mm"]
     },
     "create_port": {
       "required_params": ["port_id", "impedance_ohm"],
@@ -48,33 +58,33 @@
       "any_of": [["component"], ["name"]]
     },
     "define_brick": {
-      "required_params": ["name", "xrange", "yrange", "zrange"]
+      "required_params": ["name", "component", "xrange", "yrange", "zrange"]
     },
     "define_sphere": {
-      "required_params": ["name", "center"]
+      "required_params": ["name", "component", "center"]
     },
     "define_cone": {
-      "required_params": ["name", "zrange"]
+      "required_params": ["name", "component", "zrange"]
     },
     "define_torus": {
-      "required_params": ["name"]
+      "required_params": ["name", "component"]
     },
     "define_cylinder": {
-      "required_params": ["name", "zrange"]
+      "required_params": ["name", "component", "zrange"]
     },
     "define_ecylinder": {
-      "required_params": ["name", "zrange"]
+      "required_params": ["name", "component", "zrange"]
     },
     "define_extrude": {
-      "required_params": ["name", "points"],
+      "required_params": ["name", "component", "points"],
       "non_empty_lists": ["points"]
     },
     "define_rotate": {
-      "required_params": ["name", "points"],
+      "required_params": ["name", "component", "points"],
       "non_empty_lists": ["points"]
     },
     "define_loft": {
-      "required_params": ["name"]
+      "required_params": ["name", "component"]
     },
     "boolean_add": {
       "required_params": ["component", "target", "tool"]
@@ -103,33 +113,33 @@
       "any_of": [["component"], ["name"]]
     },
     "brick": {
-      "required_params": ["name", "xrange", "yrange", "zrange"]
+      "required_params": ["name", "component", "xrange", "yrange", "zrange"]
     },
     "sphere": {
-      "required_params": ["name", "center"]
+      "required_params": ["name", "component", "center"]
     },
     "cone": {
-      "required_params": ["name", "zrange"]
+      "required_params": ["name", "component", "zrange"]
     },
     "torus": {
-      "required_params": ["name"]
+      "required_params": ["name", "component"]
     },
     "cylinder": {
-      "required_params": ["name", "zrange"]
+      "required_params": ["name", "component", "zrange"]
     },
     "ecylinder": {
-      "required_params": ["name", "zrange"]
+      "required_params": ["name", "component", "zrange"]
     },
     "extrude": {
-      "required_params": ["name", "points"],
+      "required_params": ["name", "component", "points"],
       "non_empty_lists": ["points"]
     },
     "rotate": {
-      "required_params": ["name", "points"],
+      "required_params": ["name", "component", "points"],
       "non_empty_lists": ["points"]
     },
     "loft": {
-      "required_params": ["name"]
+      "required_params": ["name", "component"]
     },
     "solid_add": {
       "required_params": ["component", "target", "tool"]

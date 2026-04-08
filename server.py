@@ -16,6 +16,7 @@ from app.core.schemas import OptimizeRequest, OptimizeResponse
 from app.core.session_store import SessionStore
 from app.llm.intent_parser import summarize_user_intent
 from app.llm.ollama_client import check_ollama_health, generate_text, warmup_model
+from app.planning.v2_command_contract import V2CommandValidationError
 from central_brain import CentralBrain
 from config import ANN_SETTINGS, API_SETTINGS, OLLAMA_SETTINGS
 
@@ -309,6 +310,15 @@ def optimize(payload: dict[str, Any]) -> OptimizeResponse:
         return response
     except ContractValidationError as exc:
         raise HTTPException(status_code=422, detail={"error_code": "SCHEMA_VALIDATION_FAILED", "message": str(exc)}) from exc
+    except V2CommandValidationError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "error_code": "V2_COMMAND_VALIDATION_FAILED",
+                "message": str(exc),
+                "details": exc.as_detail(),
+            },
+        ) from exc
     except UnsupportedAntennaFamilyError as exc:
         raise HTTPException(status_code=422, detail={"error_code": "FAMILY_NOT_SUPPORTED", "message": str(exc)}) from exc
     except FamilyProfileConstraintError as exc:
@@ -327,6 +337,15 @@ def client_feedback(payload: dict[str, Any]) -> dict[str, Any]:
         return result
     except ContractValidationError as exc:
         raise HTTPException(status_code=422, detail={"error_code": "SCHEMA_VALIDATION_FAILED", "message": str(exc)}) from exc
+    except V2CommandValidationError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "error_code": "V2_COMMAND_VALIDATION_FAILED",
+                "message": str(exc),
+                "details": exc.as_detail(),
+            },
+        ) from exc
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail={"error_code": "SESSION_NOT_FOUND", "message": str(exc)}) from exc
     except Exception as exc:

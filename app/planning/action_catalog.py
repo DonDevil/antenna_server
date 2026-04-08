@@ -73,6 +73,53 @@ ACTION_CATALOG: dict[str, Any] = {
             ],
         },
         {
+            "action": "define_parameter",
+            "command": "define_parameter",
+            "description": "Declare a reusable CST design parameter for parametric geometry and optimization.",
+            "phase": "geometry",
+            "prerequisites": ["create_component"],
+            "incompatible_with": [],
+            "parameter_definitions": [
+                {"name": "name", "type": "string", "required": True, "min_length": 1},
+                {"name": "value", "type": "string", "required": True, "min_length": 1}
+            ],
+        },
+        {
+            "action": "update_parameter",
+            "command": "update_parameter",
+            "description": "Update a previously declared CST design parameter during refinement iterations.",
+            "phase": "geometry",
+            "prerequisites": ["define_parameter"],
+            "incompatible_with": [],
+            "parameter_definitions": [
+                {"name": "name", "type": "string", "required": True, "min_length": 1},
+                {"name": "value", "type": "string", "required": True, "min_length": 1}
+            ],
+        },
+        {
+            "action": "set_parameter",
+            "command": "set_parameter",
+            "description": "Alias of update_parameter for CST parameter writes in strict V2 workflows.",
+            "phase": "geometry",
+            "prerequisites": ["define_parameter"],
+            "incompatible_with": [],
+            "parameter_definitions": [
+                {"name": "name", "type": "string", "required": True, "min_length": 1},
+                {"name": "value", "type": "string", "required": True, "min_length": 1}
+            ],
+        },
+        {
+            "action": "rebuild_model",
+            "command": "rebuild_model",
+            "description": "Trigger a CST model rebuild after parameter mutations and before simulation/export.",
+            "phase": "simulation",
+            "prerequisites": ["define_parameter"],
+            "incompatible_with": [],
+            "parameter_definitions": [
+                {"name": "scope", "type": "string", "required": False, "min_length": 1}
+            ],
+        },
+        {
             "action": "define_brick",
             "command": "define_brick",
             "description": "Define a rectangular CST solid used for substrate, ground, feed, or rectangular patch geometry.",
@@ -115,6 +162,7 @@ ACTION_CATALOG: dict[str, Any] = {
             "incompatible_with": [],
             "parameter_definitions": [
                 {"name": "name", "type": "string", "required": True},
+                {"name": "component", "type": "string", "required": True},
                 {"name": "material", "type": "string", "required": True},
                 {"name": "length_mm", "type": "number", "required": True, "minimum": 0.0, "unit": "mm"},
                 {"name": "width_mm", "type": "number", "required": True, "minimum": 0.0, "unit": "mm"},
@@ -131,6 +179,7 @@ ACTION_CATALOG: dict[str, Any] = {
             "incompatible_with": [],
             "parameter_definitions": [
                 {"name": "name", "type": "string", "required": True},
+                {"name": "component", "type": "string", "required": True},
                 {"name": "material", "type": "string", "required": True},
                 {"name": "length_mm", "type": "number", "required": True, "minimum": 0.0, "unit": "mm"},
                 {"name": "width_mm", "type": "number", "required": True, "minimum": 0.0, "unit": "mm"},
@@ -147,6 +196,7 @@ ACTION_CATALOG: dict[str, Any] = {
             "incompatible_with": [],
             "parameter_definitions": [
                 {"name": "name", "type": "string", "required": True},
+                {"name": "component", "type": "string", "required": True},
                 {"name": "material", "type": "string", "required": True},
                 {"name": "length_mm", "type": "number", "required": True, "minimum": 0.0, "unit": "mm"},
                 {"name": "width_mm", "type": "number", "required": True, "minimum": 0.0, "unit": "mm"},
@@ -163,6 +213,7 @@ ACTION_CATALOG: dict[str, Any] = {
             "incompatible_with": [],
             "parameter_definitions": [
                 {"name": "name", "type": "string", "required": True},
+                {"name": "component", "type": "string", "required": True},
                 {"name": "material", "type": "string", "required": True},
                 {"name": "length_mm", "type": "number", "required": True, "minimum": 0.0, "unit": "mm"},
                 {"name": "width_mm", "type": "number", "required": True, "minimum": 0.0, "unit": "mm"},

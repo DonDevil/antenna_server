@@ -186,6 +186,13 @@ def test_optimize_feedback_refine_complete_and_query(tmp_path: Path) -> None:
     assert isinstance(feedback_1_data["planning_summary"]["decision_source"], str)
     assert feedback_1_data["next_command_package"]["iteration_index"] == 1
 
+    next_commands = [item["command"] for item in feedback_1_data["next_command_package"]["commands"]]
+    assert next_commands[0] == "update_parameter"
+    assert "rebuild_model" in next_commands
+    assert next_commands.index("rebuild_model") < next_commands.index("run_simulation")
+    assert "define_brick" not in next_commands
+    assert "define_cylinder" not in next_commands
+
     # Second feedback satisfies acceptance to complete the session.
     feedback_2 = _feedback_payload(
         session_id=session_id,

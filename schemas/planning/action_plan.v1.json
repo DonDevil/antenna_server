@@ -116,7 +116,7 @@
     },
     "actions": {
       "type": "array",
-      "minItems": 12,
+      "minItems": 1,
       "items": {
         "$ref": "#/$defs/actionItem"
       }
@@ -179,6 +179,10 @@
             "set_frequency_range",
             "define_material",
             "create_component",
+            "define_parameter",
+            "update_parameter",
+            "set_parameter",
+            "rebuild_model",
             "define_brick",
             "define_cylinder",
             "create_substrate",

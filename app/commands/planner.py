@@ -9,23 +9,24 @@ from app.planning.command_compiler import compile_action_plan
 from config import PLANNER_SETTINGS
 
 
-def build_fixed_action_plan(
-    request: OptimizeRequest,
-    ann: AnnPrediction,
-    session_id: str,
-    trace_id: str,
-    iteration_index: int = 0,
-) -> dict[str, Any]:
+_PARAMETER_NAME_MAP: tuple[tuple[str, str], ...] = (
+    ("px", "patch_width_mm"),
+    ("py", "patch_length_mm"),
+    ("t_cu", "patch_height_mm"),
+    ("pr", "patch_radius_mm"),
+    ("sx", "substrate_width_mm"),
+    ("sy", "substrate_length_mm"),
+    ("h_sub", "substrate_height_mm"),
+    ("feed_len", "feed_length_mm"),
+    ("feed_w", "feed_width_mm"),
+    ("feed_x", "feed_offset_x_mm"),
+    ("feed_y", "feed_offset_y_mm"),
+)
+
+
+def _build_dimensions(request: OptimizeRequest, ann: AnnPrediction) -> tuple[dict[str, float], dict[str, Any], str]:
     req_any = cast(Any, request)
     ann_any = cast(Any, ann)
-
-    target_frequency = float(req_any.target_spec.frequency_ghz)
-    target_bandwidth = float(req_any.target_spec.bandwidth_mhz)
-    allowed_material = str(req_any.design_constraints.allowed_materials[0])
-    allowed_substrate = str(req_any.design_constraints.allowed_substrates[0])
-    export_format = str(req_any.client_capabilities.export_formats[0])
-    max_sim_timeout = int(req_any.client_capabilities.max_simulation_timeout_sec)
-    supports_farfield = bool(req_any.client_capabilities.supports_farfield_export)
 
     recipe = generate_recipe(request)
     recipe_dims = cast(dict[str, Any], recipe["dimensions"])
@@ -47,266 +48,323 @@ def build_fixed_action_plan(
         "feed_offset_y_mm": float(ann_any.dimensions.feed_offset_y_mm),
     }
     patch_shape = str(recipe.get("patch_shape", getattr(req_any.target_spec, "patch_shape", "rectangular")))
+    return dims, recipe, patch_shape
+
+
+def _build_parameter_values(dims: dict[str, float]) -> dict[str, float]:
+    return {param_name: float(dims[dim_name]) for param_name, dim_name in _PARAMETER_NAME_MAP}
+
+
+def build_fixed_action_plan(
+    request: OptimizeRequest,
+    ann: AnnPrediction,
+    session_id: str,
+    trace_id: str,
+    iteration_index: int = 0,
+    previous_ann: AnnPrediction | None = None,
+) -> dict[str, Any]:
+    req_any = cast(Any, request)
+
+    target_frequency = float(req_any.target_spec.frequency_ghz)
+    target_bandwidth = float(req_any.target_spec.bandwidth_mhz)
+    allowed_material = str(req_any.design_constraints.allowed_materials[0])
+    allowed_substrate = str(req_any.design_constraints.allowed_substrates[0])
+    export_format = str(req_any.client_capabilities.export_formats[0])
+    max_sim_timeout = int(req_any.client_capabilities.max_simulation_timeout_sec)
+    supports_farfield = bool(req_any.client_capabilities.supports_farfield_export)
+
+    dims, recipe, patch_shape = _build_dimensions(request, ann)
+    parameter_values = _build_parameter_values(dims)
+    previous_parameter_values: dict[str, float] | None = None
+    if previous_ann is not None:
+        previous_dims, _, _ = _build_dimensions(request, previous_ann)
+        previous_parameter_values = _build_parameter_values(previous_dims)
+
     component_name = "antenna"
-    substrate_x_half = dims["substrate_width_mm"] / 2.0
-    substrate_y_half = dims["substrate_length_mm"] / 2.0
-    patch_x_half = dims["patch_width_mm"] / 2.0
-    patch_y_half = dims["patch_length_mm"] / 2.0
-    feed_half_width = dims["feed_width_mm"] / 2.0
-    feed_y_min = min(dims["feed_offset_y_mm"] - dims["feed_length_mm"], dims["feed_offset_y_mm"])
-    feed_y_max = max(dims["feed_offset_y_mm"] - dims["feed_length_mm"], dims["feed_offset_y_mm"])
-    patch_z_min = dims["substrate_height_mm"]
-    patch_z_max = dims["substrate_height_mm"] + dims["patch_height_mm"]
+    actions: list[dict[str, Any]] = []
+    seq = 1
 
-    if patch_shape == "circular":
-        patch_action = {
-            "seq": 9,
-            "action": "define_cylinder",
-            "command": "define_cylinder",
-            "params": {
-                "name": "patch",
-                "component": component_name,
-                "material": allowed_material,
-                "axis": "z",
-                "center": [0.0, 0.0],
-                "outer_radius": dims["patch_radius_mm"],
-                "inner_radius": 0.0,
-                "zrange": [patch_z_min, patch_z_max],
-            },
-            "on_failure": "abort",
-            "checksum_scope": "geometry",
-            "rationale_tags": ["ann_baseline_geometry", "patch_shape:circular"],
-            "expected_effects": ["patch_created"],
-        }
-    else:
-        patch_action = {
-            "seq": 9,
-            "action": "define_brick",
-            "command": "define_brick",
-            "params": {
-                "name": "patch",
-                "component": component_name,
-                "material": allowed_material,
-                "xrange": [-patch_x_half, patch_x_half],
-                "yrange": [-patch_y_half, patch_y_half],
-                "zrange": [patch_z_min, patch_z_max],
-            },
-            "on_failure": "abort",
-            "checksum_scope": "geometry",
-            "rationale_tags": ["ann_baseline_geometry", "patch_shape:rectangular"],
-            "expected_effects": ["patch_created"],
-        }
+    def add_action(
+        action: str,
+        command: str,
+        params: dict[str, Any],
+        *,
+        on_failure: str = "abort",
+        checksum_scope: str = "command",
+        rationale_tags: list[str] | None = None,
+        expected_effects: list[str] | None = None,
+    ) -> None:
+        nonlocal seq
+        actions.append(
+            {
+                "seq": seq,
+                "action": action,
+                "command": command,
+                "params": params,
+                "on_failure": on_failure,
+                "checksum_scope": checksum_scope,
+                "rationale_tags": rationale_tags or [],
+                "expected_effects": expected_effects or [],
+            }
+        )
+        seq += 1
 
-    actions: list[dict[str, Any]] = [
-        {
-            "seq": 1,
-            "action": "create_project",
-            "command": "create_project",
-            "params": {"project_name": f"design_{session_id}"},
-            "on_failure": "abort",
-            "checksum_scope": "all",
-            "rationale_tags": ["baseline_setup"],
-            "expected_effects": ["project_initialized"],
-        },
-        {
-            "seq": 2,
-            "action": "set_units",
-            "command": "set_units",
-            "params": {"geometry": "mm", "frequency": "ghz"},
-            "on_failure": "abort",
-            "checksum_scope": "all",
-            "rationale_tags": ["baseline_setup"],
-            "expected_effects": ["units_normalized"],
-        },
-        {
-            "seq": 3,
-            "action": "set_frequency_range",
-            "command": "set_frequency_range",
-            "params": {
+    if int(iteration_index) == 0:
+        add_action(
+            "create_project",
+            "create_project",
+            {"project_name": f"design_{session_id}"},
+            checksum_scope="all",
+            rationale_tags=["baseline_setup"],
+            expected_effects=["project_initialized"],
+        )
+        add_action(
+            "set_units",
+            "set_units",
+            {"geometry": "mm", "frequency": "ghz"},
+            checksum_scope="all",
+            rationale_tags=["baseline_setup"],
+            expected_effects=["units_normalized"],
+        )
+        add_action(
+            "set_frequency_range",
+            "set_frequency_range",
+            {
                 "start_ghz": max(0.1, target_frequency - 0.5),
                 "stop_ghz": target_frequency + 0.5,
             },
-            "on_failure": "abort",
-            "checksum_scope": "all",
-            "rationale_tags": ["target_driven"],
-            "expected_effects": ["solver_frequency_window_set"],
-        },
-        {
-            "seq": 4,
-            "action": "define_material",
-            "command": "define_material",
-            "params": {"name": allowed_material, "kind": "conductor", "conductivity_s_per_m": 5.8e7},
-            "on_failure": "abort",
-            "checksum_scope": "geometry",
-            "rationale_tags": ["family_constraints"],
-            "expected_effects": ["conductor_material_defined"],
-        },
-        {
-            "seq": 5,
-            "action": "define_material",
-            "command": "define_material",
-            "params": {"name": allowed_substrate, "kind": "substrate", "epsilon_r": 4.4, "loss_tangent": 0.02},
-            "on_failure": "abort",
-            "checksum_scope": "geometry",
-            "rationale_tags": ["family_constraints"],
-            "expected_effects": ["substrate_material_defined"],
-        },
-        {
-            "seq": 6,
-            "action": "create_component",
-            "command": "create_component",
-            "params": {"component": component_name},
-            "on_failure": "abort",
-            "checksum_scope": "geometry",
-            "rationale_tags": ["baseline_setup", "component_scope"],
-            "expected_effects": ["component_initialized"],
-        },
-        {
-            "seq": 7,
-            "action": "define_brick",
-            "command": "define_brick",
-            "params": {
+            checksum_scope="all",
+            rationale_tags=["target_driven"],
+            expected_effects=["solver_frequency_window_set"],
+        )
+        add_action(
+            "define_material",
+            "define_material",
+            {"name": allowed_material, "kind": "conductor", "conductivity_s_per_m": 5.8e7},
+            checksum_scope="geometry",
+            rationale_tags=["family_constraints"],
+            expected_effects=["conductor_material_defined"],
+        )
+        add_action(
+            "define_material",
+            "define_material",
+            {"name": allowed_substrate, "kind": "substrate", "epsilon_r": 4.4, "loss_tangent": 0.02},
+            checksum_scope="geometry",
+            rationale_tags=["family_constraints"],
+            expected_effects=["substrate_material_defined"],
+        )
+        add_action(
+            "create_component",
+            "create_component",
+            {"component": component_name},
+            checksum_scope="geometry",
+            rationale_tags=["baseline_setup", "component_scope"],
+            expected_effects=["component_initialized"],
+        )
+
+        for param_name, param_value in parameter_values.items():
+            add_action(
+                "define_parameter",
+                "define_parameter",
+                {"name": param_name, "value": param_value},
+                checksum_scope="geometry",
+                rationale_tags=["parametric_geometry", f"parameter:{param_name}"],
+                expected_effects=[f"parameter_{param_name}_defined"],
+            )
+
+        add_action(
+            "define_brick",
+            "define_brick",
+            {
                 "name": "substrate",
                 "component": component_name,
                 "material": allowed_substrate,
-                "xrange": [-substrate_x_half, substrate_x_half],
-                "yrange": [-substrate_y_half, substrate_y_half],
-                "zrange": [0.0, dims["substrate_height_mm"]],
+                "xrange": ["-sx/2", "sx/2"],
+                "yrange": ["-sy/2", "sy/2"],
+                "zrange": [0.0, "h_sub"],
             },
-            "on_failure": "abort",
-            "checksum_scope": "geometry",
-            "rationale_tags": ["ann_baseline_geometry", "substrate_volume"],
-            "expected_effects": ["substrate_created"],
-        },
-        {
-            "seq": 8,
-            "action": "define_brick",
-            "command": "define_brick",
-            "params": {
+            checksum_scope="geometry",
+            rationale_tags=["parametric_geometry", "substrate_volume"],
+            expected_effects=["substrate_created"],
+        )
+        add_action(
+            "define_brick",
+            "define_brick",
+            {
                 "name": "ground",
                 "component": component_name,
                 "material": allowed_material,
-                "xrange": [-substrate_x_half, substrate_x_half],
-                "yrange": [-substrate_y_half, substrate_y_half],
-                "zrange": [-dims["patch_height_mm"], 0.0],
+                "xrange": ["-sx/2", "sx/2"],
+                "yrange": ["-sy/2", "sy/2"],
+                "zrange": ["-t_cu", 0.0],
             },
-            "on_failure": "abort",
-            "checksum_scope": "geometry",
-            "rationale_tags": ["ann_baseline_geometry", "ground_reference"],
-            "expected_effects": ["ground_created"],
-        },
-        patch_action,
-        {
-            "seq": 10,
-            "action": "define_brick",
-            "command": "define_brick",
-            "params": {
+            checksum_scope="geometry",
+            rationale_tags=["parametric_geometry", "ground_reference"],
+            expected_effects=["ground_created"],
+        )
+
+        if patch_shape == "circular":
+            add_action(
+                "define_cylinder",
+                "define_cylinder",
+                {
+                    "name": "patch",
+                    "component": component_name,
+                    "material": allowed_material,
+                    "axis": "z",
+                    "center": [0.0, 0.0],
+                    "outer_radius": "pr",
+                    "inner_radius": 0.0,
+                    "zrange": ["h_sub", "h_sub+t_cu"],
+                },
+                checksum_scope="geometry",
+                rationale_tags=["parametric_geometry", "patch_shape:circular"],
+                expected_effects=["patch_created"],
+            )
+        else:
+            add_action(
+                "define_brick",
+                "define_brick",
+                {
+                    "name": "patch",
+                    "component": component_name,
+                    "material": allowed_material,
+                    "xrange": ["-px/2", "px/2"],
+                    "yrange": ["-py/2", "py/2"],
+                    "zrange": ["h_sub", "h_sub+t_cu"],
+                },
+                checksum_scope="geometry",
+                rationale_tags=["parametric_geometry", "patch_shape:rectangular"],
+                expected_effects=["patch_created"],
+            )
+
+        add_action(
+            "define_brick",
+            "define_brick",
+            {
                 "name": "feed",
                 "component": component_name,
                 "material": allowed_material,
-                "xrange": [dims["feed_offset_x_mm"] - feed_half_width, dims["feed_offset_x_mm"] + feed_half_width],
-                "yrange": [feed_y_min, feed_y_max],
-                "zrange": [patch_z_min, patch_z_max],
+                "xrange": ["feed_x-(feed_w/2)", "feed_x+(feed_w/2)"],
+                "yrange": ["feed_y-feed_len", "feed_y"],
+                "zrange": ["h_sub", "h_sub+t_cu"],
             },
-            "on_failure": "abort",
-            "checksum_scope": "geometry",
-            "rationale_tags": ["ann_baseline_geometry", "feed_matching"],
-            "expected_effects": ["feedline_created"],
-        },
-        {
-            "seq": 11,
-            "action": "create_port",
-            "command": "create_port",
-            "params": {"port_id": 1, "port_type": "discrete", "impedance_ohm": 50.0, "reference_mm": {"x": 0.0, "y": 0.0, "z": 0.0}},
-            "on_failure": "abort",
-            "checksum_scope": "simulation",
-            "rationale_tags": ["baseline_excitation"],
-            "expected_effects": ["port_defined"],
-        },
-        {
-            "seq": 12,
-            "action": "set_boundary",
-            "command": "set_boundary",
-            "params": {"boundary_type": "open_add_space", "padding_mm": 15.0},
-            "on_failure": "abort",
-            "checksum_scope": "simulation",
-            "rationale_tags": ["baseline_simulation"],
-            "expected_effects": ["boundary_set"],
-        },
-        {
-            "seq": 13,
-            "action": "set_solver",
-            "command": "set_solver",
-            "params": {"solver_type": "time_domain", "mesh_cells_per_wavelength": 20},
-            "on_failure": "abort",
-            "checksum_scope": "simulation",
-            "rationale_tags": ["baseline_simulation"],
-            "expected_effects": ["solver_ready"],
-        },
-        {
-            "seq": 15,
-            "action": "run_simulation",
-            "command": "run_simulation",
-            "params": {"timeout_sec": min(max_sim_timeout, 900)},
-            "on_failure": "abort",
-            "checksum_scope": "simulation",
-            "rationale_tags": ["baseline_simulation"],
-            "expected_effects": ["simulation_started"],
-        },
-        {
-            "seq": 16,
-            "action": "export_s_parameters",
-            "command": "export_s_parameters",
-            "params": {"format": export_format, "destination_hint": "s11"},
-            "on_failure": "continue",
-            "checksum_scope": "exports",
-            "rationale_tags": ["baseline_exports"],
-            "expected_effects": ["s_parameters_available"],
-        },
-        {
-            "seq": 17,
-            "action": "extract_summary_metrics",
-            "command": "extract_summary_metrics",
-            "params": {"metrics": ["center_frequency_ghz", "bandwidth_mhz", "return_loss_db", "vswr", "gain_dbi"]},
-            "on_failure": "continue",
-            "checksum_scope": "exports",
-            "rationale_tags": ["baseline_exports"],
-            "expected_effects": ["summary_metrics_available"],
-        },
-    ]
-
-    if supports_farfield:
-        actions.insert(
-            13,
-            {
-                "seq": 14,
-                "action": "add_farfield_monitor",
-                "command": "add_farfield_monitor",
-                "params": {
+            checksum_scope="geometry",
+            rationale_tags=["parametric_geometry", "feed_matching"],
+            expected_effects=["feedline_created"],
+        )
+        add_action(
+            "rebuild_model",
+            "rebuild_model",
+            {},
+            checksum_scope="simulation",
+            rationale_tags=["parametric_control"],
+            expected_effects=["model_rebuilt"],
+        )
+        add_action(
+            "create_port",
+            "create_port",
+            {"port_id": 1, "port_type": "discrete", "impedance_ohm": 50.0, "reference_mm": {"x": 0.0, "y": 0.0, "z": 0.0}},
+            checksum_scope="simulation",
+            rationale_tags=["baseline_excitation"],
+            expected_effects=["port_defined"],
+        )
+        add_action(
+            "set_boundary",
+            "set_boundary",
+            {"boundary_type": "open_add_space", "padding_mm": 15.0},
+            checksum_scope="simulation",
+            rationale_tags=["baseline_simulation"],
+            expected_effects=["boundary_set"],
+        )
+        add_action(
+            "set_solver",
+            "set_solver",
+            {"solver_type": "time_domain", "mesh_cells_per_wavelength": 20},
+            checksum_scope="simulation",
+            rationale_tags=["baseline_simulation"],
+            expected_effects=["solver_ready"],
+        )
+        if supports_farfield:
+            add_action(
+                "add_farfield_monitor",
+                "add_farfield_monitor",
+                {
                     "monitor_name": f"farfield_{target_frequency:.3f}ghz".replace(".", "p"),
                     "frequency_ghz": target_frequency,
                 },
-                "on_failure": "abort",
-                "checksum_scope": "simulation",
-                "rationale_tags": ["client_capability_export", "simulation_preconditions"],
-                "expected_effects": ["farfield_monitor_configured"],
-            },
+                checksum_scope="simulation",
+                rationale_tags=["client_capability_export", "simulation_preconditions"],
+                expected_effects=["farfield_monitor_configured"],
+            )
+    else:
+        changed_parameters: list[tuple[str, float]] = []
+        if previous_parameter_values is None:
+            changed_parameters = list(parameter_values.items())
+        else:
+            for param_name, param_value in parameter_values.items():
+                previous_value = previous_parameter_values.get(param_name)
+                if previous_value is None or abs(param_value - previous_value) > 1e-9:
+                    changed_parameters.append((param_name, param_value))
+
+        for param_name, param_value in changed_parameters:
+            add_action(
+                "update_parameter",
+                "update_parameter",
+                {"name": param_name, "value": param_value},
+                checksum_scope="geometry",
+                rationale_tags=["parametric_delta", f"delta:{param_name}"],
+                expected_effects=[f"parameter_{param_name}_updated"],
+            )
+
+        add_action(
+            "rebuild_model",
+            "rebuild_model",
+            {},
+            checksum_scope="simulation",
+            rationale_tags=["parametric_delta", "control_rebuild"],
+            expected_effects=["model_rebuilt"],
         )
-        actions.append(
+
+    add_action(
+        "run_simulation",
+        "run_simulation",
+        {"timeout_sec": min(max_sim_timeout, 900)},
+        checksum_scope="simulation",
+        rationale_tags=["baseline_simulation"],
+        expected_effects=["simulation_started"],
+    )
+    add_action(
+        "export_s_parameters",
+        "export_s_parameters",
+        {"format": export_format, "destination_hint": "s11"},
+        on_failure="continue",
+        checksum_scope="exports",
+        rationale_tags=["baseline_exports"],
+        expected_effects=["s_parameters_available"],
+    )
+    add_action(
+        "extract_summary_metrics",
+        "extract_summary_metrics",
+        {"metrics": ["center_frequency_ghz", "bandwidth_mhz", "return_loss_db", "vswr", "gain_dbi"]},
+        on_failure="continue",
+        checksum_scope="exports",
+        rationale_tags=["baseline_exports"],
+        expected_effects=["summary_metrics_available"],
+    )
+    if supports_farfield:
+        add_action(
+            "export_farfield",
+            "export_farfield",
             {
-                "seq": 18,
-                "action": "export_farfield",
-                "command": "export_farfield",
-                "params": {
-                    "format": export_format,
-                    "frequency_ghz": target_frequency,
-                    "destination_hint": "farfield",
-                },
-                "on_failure": "continue",
-                "checksum_scope": "exports",
-                "rationale_tags": ["client_capability_export"],
-                "expected_effects": ["farfield_available"],
-            }
+                "format": export_format,
+                "frequency_ghz": target_frequency,
+                "destination_hint": "farfield",
+            },
+            on_failure="continue",
+            checksum_scope="exports",
+            rationale_tags=["client_capability_export"],
+            expected_effects=["farfield_available"],
         )
 
     action_plan = {
@@ -352,6 +410,7 @@ def build_command_package(
     session_id: str,
     trace_id: str,
     iteration_index: int = 0,
+    previous_ann: AnnPrediction | None = None,
 ) -> dict[str, Any]:
     if PLANNER_SETTINGS.mode != "fixed" and not PLANNER_SETTINGS.dynamic_enabled:
         raise ValueError("dynamic planner mode is disabled by configuration")
@@ -362,5 +421,6 @@ def build_command_package(
         session_id=session_id,
         trace_id=trace_id,
         iteration_index=iteration_index,
+        previous_ann=previous_ann,
     )
     return compile_action_plan(action_plan)

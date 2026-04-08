@@ -350,6 +350,7 @@ class CentralBrain:
             session_id=session_id,
             trace_id=str(session["trace_id"]),
             iteration_index=next_iteration,
+            previous_ann=current_ann,
         )
 
         session["current_iteration"] = next_iteration

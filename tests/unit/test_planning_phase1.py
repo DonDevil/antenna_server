@@ -108,7 +108,29 @@ def test_farfield_monitor_command_is_inserted_before_simulation() -> None:
     assert commands.index("add_farfield_monitor") < commands.index("run_simulation")
 
 
-def test_build_command_package_uses_phase1_compiler_path() -> None:
+def test_initial_build_emits_parametric_geometry_and_rebuild() -> None:
+    command_package = build_command_package(
+        _request(),
+        _ann(),
+        session_id="session-parametric",
+        trace_id="trace-parametric",
+        iteration_index=0,
+    )
+
+    commands = command_package["commands"]
+    command_names = [item["command"] for item in commands]
+
+    assert "define_parameter" in command_names
+    assert "rebuild_model" in command_names
+    assert command_names.index("rebuild_model") < command_names.index("run_simulation")
+
+    brick_commands = [item for item in commands if item["command"] == "define_brick"]
+    assert brick_commands
+    assert brick_commands[0]["params"]["component"] == "antenna"
+    assert any(isinstance(value, str) and "sx" in value for value in brick_commands[0]["params"]["xrange"])
+
+
+def test_build_command_package_uses_delta_compiler_path_for_refinement_iterations() -> None:
     command_package = build_command_package(
         _request(),
         _ann(),
@@ -117,10 +139,16 @@ def test_build_command_package_uses_phase1_compiler_path() -> None:
         iteration_index=2,
     )
 
+    commands = [item["command"] for item in command_package["commands"]]
+
     assert command_package["schema_version"] == "cst_command_package.v2"
     assert command_package["command_catalog_version"] == "v2"
     assert command_package["iteration_index"] == 2
-    assert command_package["commands"][2]["command"] == "set_frequency_range"
+    assert commands[0] == "update_parameter"
+    assert "rebuild_model" in commands
+    assert "run_simulation" in commands
+    assert "define_brick" not in commands
+    assert "define_cylinder" not in commands
 
 
 def test_v2_preflight_accepts_valid_alias_rich_package() -> None:
@@ -144,6 +172,7 @@ def test_v2_preflight_accepts_valid_alias_rich_package() -> None:
                 "command": "define_extrude",
                 "params": {
                     "name": "solid1",
+                    "component": "component1",
                     "points": [[0, 0], [10, 0], [10, 5]],
                 },
             },
@@ -223,7 +252,31 @@ def test_v2_preflight_rejects_missing_required_params() -> None:
         assert False, "expected missing params to be rejected"
     except ValueError as exc:
         assert "missing required params" in str(exc)
+        assert "component" in str(exc)
         assert "zrange" in str(exc)
+
+
+def test_v2_preflight_accepts_parameter_update_commands() -> None:
+    package = {
+        "schema_version": "cst_command_package.v2",
+        "command_catalog_version": "v2",
+        "session_id": "session-v2",
+        "trace_id": "trace-v2",
+        "design_id": "design-v2",
+        "iteration_index": 1,
+        "units": {"geometry": "mm", "frequency": "ghz"},
+        "predicted_dimensions": {},
+        "commands": [
+            {"seq": 1, "command": "update_parameter", "params": {"name": "px", "value": 41.5}},
+            {"seq": 2, "command": "set_parameter", "params": {"name": "py", "value": "py+0.2"}},
+            {"seq": 3, "command": "rebuild_model", "params": {}},
+            {"seq": 4, "command": "run_simulation", "params": {"timeout_sec": 120}},
+        ],
+        "expected_exports": ["s_parameters"],
+        "safety_checks": ["command_order_validated"],
+    }
+
+    validate_command_package_v2(package)
 
 
 def test_v2_preflight_enforces_any_of_groups() -> None:
@@ -268,7 +321,7 @@ def test_v2_preflight_enforces_non_empty_points_lists() -> None:
             {
                 "seq": 1,
                 "command": "define_rotate",
-                "params": {"name": "rot1", "points": []},
+                "params": {"name": "rot1", "component": "component1", "points": []},
             },
         ],
         "expected_exports": [],
