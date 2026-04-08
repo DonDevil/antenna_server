@@ -118,3 +118,47 @@ def test_intent_parser_llm_can_set_family() -> None:
             result = summarize_user_intent("build me a rectangular patch")
 
     assert result["parsed_antenna_family"] == "microstrip_patch"
+
+
+def test_intent_parser_extracts_materials_and_shape_from_text() -> None:
+    with patch("app.llm.intent_parser.PLANNER_SETTINGS") as mock_settings:
+        mock_settings.llm_enabled_for_intent = False
+        result = summarize_user_intent(
+            "Design a rectangular microstrip patch antenna at 3 GHz with 100 MHz bandwidth using FR4 and copper."
+        )
+
+    assert result["parsed_antenna_family"] == "microstrip_patch"
+    assert result["parsed_patch_shape"] == "rectangular"
+    assert result["parsed_substrate_material"] == "FR-4 (lossy)"
+    assert result["parsed_conductor_material"] == "Copper (annealed)"
+
+
+def test_intent_parser_handles_spoken_units_and_wearable_aliases() -> None:
+    """Regex/alias parsing should handle natural phrasing like gigahertz and megs."""
+    with patch("app.llm.intent_parser.PLANNER_SETTINGS") as mock_settings:
+        mock_settings.llm_enabled_for_intent = False
+        result = summarize_user_intent(
+            "I need a wearable antenna centered near 2.45 gigahertz with about 80 megs of bandwidth on FR4 using copper."
+        )
+
+    assert result["parsed_frequency_ghz"] == pytest.approx(2.45)
+    assert result["parsed_bandwidth_mhz"] == pytest.approx(80.0)
+    assert result["parsed_antenna_family"] == "wban_patch"
+    assert result["parsed_substrate_material"] == "FR-4 (lossy)"
+    assert result["parsed_conductor_material"] == "Copper (annealed)"
+
+
+def test_intent_parser_normalizes_llm_family_and_shape_aliases() -> None:
+    llm_response = {
+        "frequency_ghz": 5.8,
+        "bandwidth_mhz": 150.0,
+        "antenna_family": "AMC patch",
+        "patch_shape": "round",
+    }
+    with patch("app.llm.intent_parser.PLANNER_SETTINGS") as mock_settings:
+        mock_settings.llm_enabled_for_intent = True
+        with patch("app.llm.intent_parser.generate_json", return_value=llm_response):
+            result = summarize_user_intent("Design a round AMC antenna")
+
+    assert result["parsed_antenna_family"] == "amc_patch"
+    assert result["parsed_patch_shape"] == "circular"

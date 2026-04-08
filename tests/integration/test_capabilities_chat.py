@@ -50,6 +50,28 @@ def test_chat_answers_material_and_capability_questions(tmp_path: Path) -> None:
     assert isinstance(data["capabilities"]["available_substrate_materials"], list)
 
 
+def test_chat_naturally_summarizes_ready_requirements(tmp_path: Path) -> None:
+    client = _build_test_client(tmp_path)
+
+    response = client.post(
+        "/api/v1/chat",
+        json={
+            "message": "I want a rectangular microstrip patch antenna at 3 GHz with 100 MHz bandwidth using FR4 and copper.",
+            "requirements": {},
+        },
+    )
+    assert response.status_code == 200
+    data = response.json()
+
+    assert data["ready_to_start_pipeline"] is True
+    assert data["captured_details"]["antenna_family"] == "microstrip_patch"
+    assert data["captured_details"]["patch_shape"] == "rectangular"
+    assert isinstance(data["assistant_message"], str)
+    assert "3" in data["assistant_message"]
+    assert "100" in data["assistant_message"]
+    assert "microstrip" in data["assistant_message"].lower()
+
+
 def test_health_endpoint_reports_dependency_statuses(tmp_path: Path) -> None:
     client = _build_test_client(tmp_path)
 

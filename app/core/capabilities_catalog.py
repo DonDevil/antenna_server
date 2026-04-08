@@ -23,7 +23,7 @@ def _default_capabilities() -> dict[str, Any]:
         },
         "supported_families": list_supported_families(),
         "available_conductor_materials": ["Copper (annealed)"],
-        "available_substrate_materials": ["FR-4 (lossy)"],
+        "available_substrate_materials": ["FR-4 (lossy)", "Rogers RT/duroid 5880", "Rogers RO3003"],
         "notes": "Default capabilities fallback.",
     }
 

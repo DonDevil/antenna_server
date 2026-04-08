@@ -170,6 +170,157 @@ def capabilities() -> dict[str, Any]:
     return load_capabilities_catalog()
 
 
+def _first_non_empty_string(value: Any) -> str | None:
+    if isinstance(value, list) and value:
+        value = value[0]
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def _merge_chat_requirements(intent: dict[str, Any], current_requirements: dict[str, Any]) -> dict[str, Any]:
+    target_spec = current_requirements.get("target_spec", {}) if isinstance(current_requirements.get("target_spec"), dict) else {}
+    design_constraints = (
+        current_requirements.get("design_constraints", {})
+        if isinstance(current_requirements.get("design_constraints"), dict)
+        else {}
+    )
+
+    parsed_freq = intent.get("parsed_frequency_ghz")
+    parsed_bw = intent.get("parsed_bandwidth_mhz")
+    parsed_family = intent.get("parsed_antenna_family")
+    parsed_patch_shape = intent.get("parsed_patch_shape")
+    parsed_substrate_material = intent.get("parsed_substrate_material")
+    parsed_conductor_material = intent.get("parsed_conductor_material")
+
+    merged = {
+        "frequency_ghz": parsed_freq if parsed_freq is not None else current_requirements.get("frequency_ghz", target_spec.get("frequency_ghz")),
+        "bandwidth_mhz": parsed_bw if parsed_bw is not None else current_requirements.get("bandwidth_mhz", target_spec.get("bandwidth_mhz")),
+        "antenna_family": parsed_family if parsed_family is not None else current_requirements.get("antenna_family", target_spec.get("antenna_family")),
+        "patch_shape": parsed_patch_shape if parsed_patch_shape is not None else current_requirements.get("patch_shape", target_spec.get("patch_shape")),
+        "substrate_material": (
+            parsed_substrate_material
+            or current_requirements.get("substrate_material")
+            or _first_non_empty_string(current_requirements.get("allowed_substrates"))
+            or _first_non_empty_string(design_constraints.get("allowed_substrates"))
+        ),
+        "conductor_material": (
+            parsed_conductor_material
+            or current_requirements.get("conductor_material")
+            or _first_non_empty_string(current_requirements.get("allowed_materials"))
+            or _first_non_empty_string(design_constraints.get("allowed_materials"))
+        ),
+    }
+    return merged
+
+
+def _missing_required_chat_fields(merged: dict[str, Any]) -> list[str]:
+    return [
+        field_name
+        for field_name in ("frequency_ghz", "bandwidth_mhz", "antenna_family")
+        if merged.get(field_name) in (None, "")
+    ]
+
+
+def _pretty_requirement_name(field_name: str) -> str:
+    return field_name.replace("_ghz", " (GHz)").replace("_mhz", " (MHz)").replace("_", " ")
+
+
+def _build_natural_chat_summary(
+    *,
+    merged: dict[str, Any],
+    missing_required: list[str],
+    pipeline_requested: bool,
+) -> str:
+    lines = ["Here’s what I have for your antenna so far:"]
+
+    if merged.get("antenna_family"):
+        lines.append(f"- Antenna family: {merged['antenna_family']}")
+    if merged.get("patch_shape"):
+        lines.append(f"- Patch shape: {merged['patch_shape']}")
+    if merged.get("frequency_ghz") is not None:
+        lines.append(f"- Resonant frequency target: {merged['frequency_ghz']} GHz")
+    if merged.get("bandwidth_mhz") is not None:
+        lines.append(f"- Bandwidth target: {merged['bandwidth_mhz']} MHz")
+    if merged.get("substrate_material"):
+        lines.append(f"- Substrate: {merged['substrate_material']}")
+    if merged.get("conductor_material"):
+        lines.append(f"- Conductor: {merged['conductor_material']}")
+
+    if len(lines) == 1:
+        lines.append("- I have not locked in the design parameters yet.")
+
+    if missing_required:
+        missing_text = ", ".join(_pretty_requirement_name(item) for item in missing_required)
+        lines.append(f"I still need {missing_text} before the pipeline can start.")
+    elif pipeline_requested:
+        lines.append("Everything essential is captured, so you can start the pipeline now if you want.")
+    else:
+        lines.append("If that matches your intent, you can start the pipeline whenever you're ready.")
+
+    return "\n".join(lines)
+
+
+def _build_fallback_chat_reply(
+    *,
+    user_message: str,
+    merged: dict[str, Any],
+    missing_required: list[str],
+    supported_families: list[str],
+    conductor_materials: list[Any],
+    substrate_materials: list[Any],
+    frequency_range: dict[str, Any],
+    bandwidth_range: dict[str, Any],
+) -> str:
+    text = user_message.lower()
+    parts: list[str] = []
+
+    if any(token in text for token in ("what is", "why", "how", "difference", "explain", "doubt")):
+        if "microstrip" in text or "patch" in text:
+            parts.append(
+                "A microstrip patch is the easiest printed antenna family to start with because it is simple to fabricate, tune, and simulate."
+            )
+        if "substrate" in text or "fr4" in text or "rogers" in text or "material" in text:
+            parts.append(
+                "The substrate affects resonance, size, bandwidth, and loss: FR-4 is practical and affordable, while Rogers materials usually give lower RF loss and more stable behavior."
+            )
+        if "gain" in text or "vswr" in text:
+            parts.append(
+                "Gain and VSWR are tuning outcomes, so we normally refine them through the optimization loop after the starting geometry is generated."
+            )
+
+    if "famil" in text:
+        parts.append(f"The main supported families are {', '.join(map(str, supported_families))}.")
+    if "capabil" in text or "range" in text:
+        parts.append(
+            f"The working range is about {frequency_range.get('min')} to {frequency_range.get('max')} GHz, with bandwidth targets from {bandwidth_range.get('min')} to {bandwidth_range.get('max')} MHz."
+        )
+    if "substrate" in text or "conductor" in text or "material" in text:
+        parts.append(
+            f"Supported conductor materials include {', '.join(map(str, conductor_materials))}, and substrate choices include {', '.join(map(str, substrate_materials))}."
+        )
+
+    captured_parts: list[str] = []
+    if merged.get("frequency_ghz") is not None:
+        captured_parts.append(f"{merged['frequency_ghz']} GHz")
+    if merged.get("bandwidth_mhz") is not None:
+        captured_parts.append(f"{merged['bandwidth_mhz']} MHz bandwidth")
+    if merged.get("antenna_family"):
+        captured_parts.append(f"the {merged['antenna_family']} family")
+
+    if captured_parts:
+        parts.append("So far I have " + ", ".join(captured_parts) + ".")
+
+    if missing_required:
+        missing_text = ", ".join(_pretty_requirement_name(item) for item in missing_required)
+        parts.append(f"To move forward, I still need {missing_text}.")
+    elif not parts:
+        parts.append("I have enough to move forward and can help explain or refine any design choice before you start the pipeline.")
+
+    return " ".join(parts).strip()
+
+
 @app.post("/api/v1/intent/parse")
 def parse_intent(payload: dict[str, Any]) -> dict[str, Any]:
     user_request = payload.get("user_request")
@@ -199,94 +350,87 @@ def chat(payload: dict[str, Any]) -> dict[str, Any]:
 
     intent = summarize_user_intent(user_message)
     capabilities_catalog = load_capabilities_catalog()
-    parsed_freq = intent.get("parsed_frequency_ghz")
-    parsed_bw = intent.get("parsed_bandwidth_mhz")
-    parsed_family = intent.get("parsed_antenna_family")
-
-    merged = {
-        "frequency_ghz": parsed_freq if parsed_freq is not None else current_requirements.get("frequency_ghz"),
-        "bandwidth_mhz": parsed_bw if parsed_bw is not None else current_requirements.get("bandwidth_mhz"),
-        "antenna_family": parsed_family if parsed_family is not None else current_requirements.get("antenna_family"),
-    }
-
-    supported_families = list_supported_families()
+    supported_families = capabilities_catalog.get("supported_families", list_supported_families())
     frequency_range = capabilities_catalog.get("frequency_range_ghz", {})
     bandwidth_range = capabilities_catalog.get("bandwidth_range_mhz", {})
     conductor_materials = capabilities_catalog.get("available_conductor_materials", [])
     substrate_materials = capabilities_catalog.get("available_substrate_materials", [])
 
-    freq_min = frequency_range.get("min")
-    freq_max = frequency_range.get("max")
-    bw_min = bandwidth_range.get("min")
-    bw_max = bandwidth_range.get("max")
-
+    merged = _merge_chat_requirements(intent, current_requirements)
+    missing_required = _missing_required_chat_fields(merged)
     text = user_message.lower()
-    if "available" in text and "famil" in text:
-        assistant_message = (
-            "Available antenna families are: "
-            f"{', '.join(supported_families)}. "
-            "For rectangular patch, use microstrip_patch. "
-            "Tell me target frequency (GHz), bandwidth (MHz), and chosen family to start the pipeline."
+    pipeline_requested = any(
+        marker in text
+        for marker in (
+            "start pipeline",
+            "start the pipeline",
+            "run pipeline",
+            "begin pipeline",
+            "start optimization",
+            "go ahead",
+            "proceed",
         )
-    elif "capabil" in text or ("range" in text and ("frequency" in text or "bandwidth" in text)):
-        assistant_message = (
-            "Current capability ranges are: "
-            f"frequency {freq_min} to {freq_max} GHz, "
-            f"bandwidth {bw_min} to {bw_max} MHz. "
-            "These are configurable from the capabilities catalog."
+    )
+
+    natural_summary = _build_natural_chat_summary(
+        merged=merged,
+        missing_required=missing_required,
+        pipeline_requested=pipeline_requested,
+    )
+
+    assistant_message: str | None = None
+    if check_ollama_health(timeout_sec=3):
+        llm_text = generate_text(
+            system_prompt=(
+                "You are a friendly antenna design copilot inside an interactive design studio. "
+                "Talk naturally like a helpful engineering assistant, not a rigid form bot. "
+                "Your goals are to answer doubts about antennas and CST implementation, gather missing design inputs, "
+                "and help the user feel ready to start the pipeline. "
+                "Ask at most two concise follow-up questions when important details are missing. "
+                "Do not invent unknown specifications. Keep the response conversational and practical."
+            ),
+            prompt=(
+                f"User message: {user_message}\n"
+                f"Captured details so far: {merged}\n"
+                f"Missing required fields: {missing_required}\n"
+                f"Supported families: {supported_families}\n"
+                f"Available conductor materials: {conductor_materials}\n"
+                f"Available substrate materials: {substrate_materials}\n"
+                f"Capability ranges: frequency_ghz={frequency_range}, bandwidth_mhz={bandwidth_range}\n"
+                f"Pipeline requested in this turn: {pipeline_requested}\n"
+                "If the user is asking a technical question, answer it first in plain language. "
+                "If the required details are already present, confirm that naturally and mention they can start the pipeline when ready. "
+                "Do not output JSON."
+            ),
+            timeout_sec=45,
+            model_name=OLLAMA_SETTINGS.big_model_name,
         )
-    elif "substrate" in text or "conductor" in text or "material" in text:
-        assistant_message = (
-            f"Available conductor materials: {', '.join(map(str, conductor_materials))}. "
-            f"Available substrate materials: {', '.join(map(str, substrate_materials))}."
+        if llm_text:
+            assistant_message = f"{llm_text.strip()}\n\n{natural_summary}"
+
+    if assistant_message is None:
+        fallback_message = _build_fallback_chat_reply(
+            user_message=user_message,
+            merged=merged,
+            missing_required=missing_required,
+            supported_families=list(map(str, supported_families)),
+            conductor_materials=list(conductor_materials),
+            substrate_materials=list(substrate_materials),
+            frequency_range=frequency_range,
+            bandwidth_range=bandwidth_range,
         )
-    else:
-        missing = [
-            key
-            for key, value in merged.items()
-            if value in (None, "")
-        ]
-        if check_ollama_health(timeout_sec=3):
-            llm_text = generate_text(
-                system_prompt=(
-                    "You are an antenna design assistant. "
-                    "Answer user's question in 2-5 lines and guide them to provide frequency_ghz, "
-                    "bandwidth_mhz, and antenna_family. Keep it concise and practical."
-                ),
-                prompt=(
-                    f"User message: {user_message}\n"
-                    f"Current extracted requirements: {merged}\n"
-                    f"Supported families: {supported_families}\n"
-                    f"Capability ranges: frequency_ghz={frequency_range}, bandwidth_mhz={bandwidth_range}\n"
-                    f"Available conductor materials: {conductor_materials}\n"
-                    f"Available substrate materials: {substrate_materials}\n"
-                    "If user asks family choices, list all exactly."
-                ),
-                timeout_sec=30,
-                model_name=OLLAMA_SETTINGS.big_model_name,
-            )
-            assistant_message = llm_text or "Tell me frequency (GHz), bandwidth (MHz), and antenna family."
-        else:
-            if missing:
-                assistant_message = (
-                    "Got it. I still need: "
-                    f"{', '.join(missing)}. "
-                    f"Supported families: {', '.join(supported_families)}. "
-                    f"Frequency range: {freq_min}-{freq_max} GHz. "
-                    f"Bandwidth range: {bw_min}-{bw_max} MHz."
-                )
-            else:
-                assistant_message = (
-                    "Great, requirements captured. "
-                    f"frequency={merged['frequency_ghz']} GHz, bandwidth={merged['bandwidth_mhz']} MHz, "
-                    f"family={merged['antenna_family']}. You can start the pipeline now."
-                )
+        assistant_message = f"{fallback_message}\n\n{natural_summary}" if fallback_message else natural_summary
 
     return {
         "status": "ok",
         "assistant_message": assistant_message,
         "intent_summary": intent,
         "requirements": merged,
+        "captured_details": merged,
+        "missing_requirements": missing_required,
+        "ready_to_start_pipeline": len(missing_required) == 0,
+        "pipeline_intent_detected": pipeline_requested,
+        "natural_summary": natural_summary,
         "supported_families": supported_families,
         "capabilities": {
             "frequency_range_ghz": frequency_range,
