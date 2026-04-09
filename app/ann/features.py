@@ -20,11 +20,16 @@ def build_ann_feature_map(request: OptimizeRequest, recipe: dict[str, Any] | Non
 
     feature_map: dict[str, float] = {
         "frequency_ghz": float(request.target_spec.frequency_ghz),
+        "target_frequency_ghz": float(request.target_spec.frequency_ghz),
         "bandwidth_mhz": float(request.target_spec.bandwidth_mhz),
+        "target_bandwidth_mhz": float(request.target_spec.bandwidth_mhz),
         "substrate_epsilon_r": float(substrate["epsilon_r"]),
         "substrate_height_mm": float(recipe_payload.get("dimensions", {}).get("substrate_height_mm", 1.6)),
         "minimum_gain_dbi": float(acceptance.minimum_gain_dbi),
+        "target_minimum_gain_dbi": float(acceptance.minimum_gain_dbi),
         "maximum_vswr": float(acceptance.maximum_vswr),
+        "target_maximum_vswr": float(acceptance.maximum_vswr),
+        "target_minimum_return_loss_db": float(acceptance.minimum_return_loss_db),
         "priority_s11_minimize": 1.0 if primary.s11 == "minimize" else 0.0,
         "priority_bandwidth_maximize": 1.0 if primary.bandwidth == "maximize" else 0.0,
         "priority_gain_maximize": 1.0 if primary.gain == "maximize" else 0.0,

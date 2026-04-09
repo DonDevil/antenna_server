@@ -1,0 +1,119 @@
+{
+  "model_version": "amc_patch_formula_bootstrap_v1",
+  "family": "amc_patch",
+  "prediction_mode": "selected_output_override",
+  "input_columns": [
+    "target_frequency_ghz",
+    "target_bandwidth_mhz",
+    "target_minimum_gain_dbi",
+    "substrate_epsilon_r",
+    "substrate_height_mm"
+  ],
+  "output_columns": [
+    "amc_unit_cell_period_mm",
+    "amc_patch_size_mm",
+    "amc_gap_mm",
+    "amc_via_radius_mm",
+    "amc_air_gap_mm"
+  ],
+  "x_mean": [
+    3.754182815551758,
+    254.4658966064453,
+    7.0150628089904785,
+    3.2822537422180176,
+    1.889548420906067
+  ],
+  "x_std": [
+    1.3000646829605103,
+    112.66049194335938,
+    1.7335165739059448,
+    1.0998568534851074,
+    0.6341813206672668
+  ],
+  "y_mean": [
+    21.206022262573242,
+    16.992292404174805,
+    4.2137298583984375,
+    0.6605815291404724,
+    4.157642364501953
+  ],
+  "y_std": [
+    9.02973747253418,
+    7.0749688148498535,
+    2.1768712997436523,
+    0.3034054636955261,
+    1.9345053434371948
+  ],
+  "train_rows": 10500,
+  "validation_rows": 2250,
+  "test_rows": 2250,
+  "best_validation_loss": 0.0076934401877224445,
+  "train_mape": 3.938824415206909,
+  "validation_mape": 4.046133041381836,
+  "test_mape": 4.137107849121094,
+  "fit_status": "balanced",
+  "train_mae": {
+    "amc_unit_cell_period_mm": 0.4479714334011078,
+    "amc_patch_size_mm": 0.388329416513443,
+    "amc_gap_mm": 0.16112446784973145,
+    "amc_via_radius_mm": 0.03555164858698845,
+    "amc_air_gap_mm": 0.22116141021251678
+  },
+  "validation_mae": {
+    "amc_unit_cell_period_mm": 0.4571428596973419,
+    "amc_patch_size_mm": 0.3935556411743164,
+    "amc_gap_mm": 0.16530047357082367,
+    "amc_via_radius_mm": 0.03790842741727829,
+    "amc_air_gap_mm": 0.23305007815361023
+  },
+  "test_mae": {
+    "amc_unit_cell_period_mm": 0.4868803024291992,
+    "amc_patch_size_mm": 0.4182884991168976,
+    "amc_gap_mm": 0.16949112713336945,
+    "amc_via_radius_mm": 0.03745525702834129,
+    "amc_air_gap_mm": 0.23095358908176422
+  },
+  "train_mape_by_column": {
+    "amc_unit_cell_period_mm": 2.1536643505096436,
+    "amc_patch_size_mm": 2.308248996734619,
+    "amc_gap_mm": 4.100378513336182,
+    "amc_via_radius_mm": 5.527214527130127,
+    "amc_air_gap_mm": 5.604616165161133
+  },
+  "validation_mape_by_column": {
+    "amc_unit_cell_period_mm": 2.1659858226776123,
+    "amc_patch_size_mm": 2.317192792892456,
+    "amc_gap_mm": 4.099408149719238,
+    "amc_via_radius_mm": 5.8016533851623535,
+    "amc_air_gap_mm": 5.846426010131836
+  },
+  "test_mape_by_column": {
+    "amc_unit_cell_period_mm": 2.2946856021881104,
+    "amc_patch_size_mm": 2.4440038204193115,
+    "amc_gap_mm": 4.2960309982299805,
+    "amc_via_radius_mm": 5.826419830322266,
+    "amc_air_gap_mm": 5.824398517608643
+  },
+  "safe_output_bounds": {
+    "amc_unit_cell_period_mm": [
+      7.422228,
+      57.085772
+    ],
+    "amc_patch_size_mm": [
+      6.775659,
+      42.046841
+    ],
+    "amc_gap_mm": [
+      0.5272969999999999,
+      15.060003
+    ],
+    "amc_via_radius_mm": [
+      0.15875699999999998,
+      2.138943
+    ],
+    "amc_air_gap_mm": [
+      0.676806,
+      13.311794
+    ]
+  }
+}

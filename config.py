@@ -82,11 +82,44 @@ class AnnSettings:
 
 
 @dataclass(frozen=True)
+class RectPatchAnnSettings:
+    model_version: str = "rect_patch_v1"
+    family: str = "microstrip_patch"
+    patch_shape: str = "rectangular"
+    feed_type: str = "edge"
+    model_dir: Path = MODELS_DIR / "ann" / "rect_patch_v1"
+    checkpoint_path: Path = model_dir / "inverse_ann.pt"
+    metadata_path: Path = model_dir / "metadata.json"
+    input_columns: tuple[str, ...] = (
+        "target_frequency_ghz",
+        "target_bandwidth_mhz",
+        "substrate_epsilon_r",
+        "substrate_height_mm",
+    )
+    output_columns: tuple[str, ...] = (
+        "patch_length_mm",
+        "patch_width_mm",
+        "feed_width_mm",
+        "feed_offset_y_mm",
+    )
+
+
+@dataclass(frozen=True)
 class DataSettings:
     raw_dataset_path: Path = DATA_DIR / "raw" / "dataset.csv"
     validated_dataset_path: Path = DATA_DIR / "validated" / "dataset_validated.csv"
     rejected_dataset_path: Path = DATA_DIR / "rejected" / "dataset_rejected.csv"
     min_rows_for_training: int = 200
+
+
+@dataclass(frozen=True)
+class RectPatchDataSettings:
+    raw_feedback_path: Path = DATA_DIR / "raw" / "rect_patch_feedback_v1.csv"
+    validated_feedback_path: Path = DATA_DIR / "validated" / "rect_patch_feedback_validated_v1.csv"
+    rejected_feedback_path: Path = DATA_DIR / "rejected" / "rect_patch_feedback_rejected_v1.csv"
+    inverse_train_path: Path = DATA_DIR / "validated" / "rect_patch_inverse_train_v1.csv"
+    forward_train_path: Path = DATA_DIR / "validated" / "rect_patch_forward_train_v1.csv"
+    min_rows_for_training: int = 150
 
 
 @dataclass(frozen=True)
@@ -109,5 +142,7 @@ API_SETTINGS = ApiSettings()
 OLLAMA_SETTINGS = OllamaSettings()
 PLANNER_SETTINGS = PlannerSettings()
 ANN_SETTINGS = AnnSettings()
+RECT_PATCH_ANN_SETTINGS = RectPatchAnnSettings()
 DATA_SETTINGS = DataSettings()
+RECT_PATCH_DATA_SETTINGS = RectPatchDataSettings()
 BOUNDS = Bounds()

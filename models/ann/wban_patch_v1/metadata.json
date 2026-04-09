@@ -1,0 +1,135 @@
+{
+  "model_version": "wban_patch_formula_bootstrap_v1",
+  "family": "wban_patch",
+  "prediction_mode": "selected_output_override",
+  "input_columns": [
+    "target_frequency_ghz",
+    "target_bandwidth_mhz",
+    "substrate_epsilon_r",
+    "substrate_height_mm",
+    "body_distance_mm",
+    "bending_radius_mm"
+  ],
+  "output_columns": [
+    "patch_length_mm",
+    "patch_width_mm",
+    "feed_width_mm",
+    "feed_offset_y_mm",
+    "ground_slot_length_mm",
+    "ground_slot_width_mm"
+  ],
+  "x_mean": [
+    3.97247314453125,
+    160.41087341308594,
+    2.5965867042541504,
+    1.906579613685608,
+    6.031002998352051,
+    65.26701354980469
+  ],
+  "x_std": [
+    1.1531524658203125,
+    69.46792602539062,
+    0.3999854028224945,
+    0.6394362449645996,
+    2.303924560546875,
+    20.291296005249023
+  ],
+  "y_mean": [
+    23.421142578125,
+    30.660436630249023,
+    1.3273701667785645,
+    -8.511960983276367,
+    8.19786262512207,
+    1.851920485496521
+  ],
+  "y_std": [
+    8.205171585083008,
+    10.160158157348633,
+    0.46199309825897217,
+    3.049778699874878,
+    3.2450287342071533,
+    0.7867063879966736
+  ],
+  "train_rows": 10500,
+  "validation_rows": 2250,
+  "test_rows": 2250,
+  "best_validation_loss": 0.010206995531916618,
+  "train_mape": 3.946218490600586,
+  "validation_mape": 4.110479831695557,
+  "test_mape": 4.1001811027526855,
+  "fit_status": "balanced",
+  "train_mae": {
+    "patch_length_mm": 0.6631097197532654,
+    "patch_width_mm": 1.003604769706726,
+    "feed_width_mm": 0.04415253922343254,
+    "feed_offset_y_mm": 0.325398325920105,
+    "ground_slot_length_mm": 0.3015001714229584,
+    "ground_slot_width_mm": 0.11336716264486313
+  },
+  "validation_mae": {
+    "patch_length_mm": 0.6905866861343384,
+    "patch_width_mm": 1.024405837059021,
+    "feed_width_mm": 0.04704232141375542,
+    "feed_offset_y_mm": 0.33695319294929504,
+    "ground_slot_length_mm": 0.30684882402420044,
+    "ground_slot_width_mm": 0.11913597583770752
+  },
+  "test_mae": {
+    "patch_length_mm": 0.7114565372467041,
+    "patch_width_mm": 1.040766954421997,
+    "feed_width_mm": 0.046258583664894104,
+    "feed_offset_y_mm": 0.34313446283340454,
+    "ground_slot_length_mm": 0.32609298825263977,
+    "ground_slot_width_mm": 0.12281336635351181
+  },
+  "train_mape_by_column": {
+    "patch_length_mm": 2.8531699180603027,
+    "patch_width_mm": 3.325254440307617,
+    "feed_width_mm": 3.4022107124328613,
+    "feed_offset_y_mm": 3.840618133544922,
+    "ground_slot_length_mm": 3.7542262077331543,
+    "ground_slot_width_mm": 6.5018310546875
+  },
+  "validation_mape_by_column": {
+    "patch_length_mm": 2.9569334983825684,
+    "patch_width_mm": 3.38083553314209,
+    "feed_width_mm": 3.6151037216186523,
+    "feed_offset_y_mm": 3.9869751930236816,
+    "ground_slot_length_mm": 3.8390934467315674,
+    "ground_slot_width_mm": 6.883938789367676
+  },
+  "test_mape_by_column": {
+    "patch_length_mm": 3.0218563079833984,
+    "patch_width_mm": 3.3709917068481445,
+    "feed_width_mm": 3.518808603286743,
+    "feed_offset_y_mm": 3.979734420776367,
+    "ground_slot_length_mm": 3.9712376594543457,
+    "ground_slot_width_mm": 6.738458633422852
+  },
+  "safe_output_bounds": {
+    "patch_length_mm": [
+      10.286893450785419,
+      50.218060765997855
+    ],
+    "patch_width_mm": [
+      14.271074776008009,
+      64.88486387806786
+    ],
+    "feed_width_mm": [
+      0.4959064216763492,
+      3.2320851909804023
+    ],
+    "feed_offset_y_mm": [
+      -20.845794275216786,
+      -3.106813427916352
+    ],
+    "ground_slot_length_mm": [
+      2.0606769999999996,
+      22.851623
+    ],
+    "ground_slot_width_mm": [
+      0.18601800000000002,
+      5.919982
+    ]
+  }
+}

@@ -1,4 +1,8 @@
-I'll give you a concrete handoff plan with exact dataset files, column order, model scope, training flow, and integration rules so Copilot can implement it directly.## Objective
+# Rectangular Patch ANN Handoff
+
+I'll give you a concrete handoff plan with exact dataset files, column order, model scope, training flow, and integration rules so Copilot can implement it directly.
+
+## Objective
 
 Build a rectangular microstrip patch ANN pipeline that uses real CST feedback, improves over time, and does not break the current server contract.
 
@@ -196,13 +200,10 @@ patch_width_mm,
 feed_width_mm,
 feed_offset_y_mm
 
-
 Derived forward training dataset
 Create rect_patch_forward_train_v1.csv.
 
 Exact column order
-
-
 target_frequency_ghz,
 target_bandwidth_mhz,
 substrate_epsilon_r,
@@ -257,6 +258,29 @@ target_bandwidth_mhz: 30.0 to 300.0
 substrate_epsilon_r: 2.2 to 4.4
 
 substrate_height_mm: 0.8 to 3.2
+
+Implemented workflow entry points
+Once real CST rows are available, use these commands in this repo:
+
+python scripts/validate_rect_patch_feedback.py
+python scripts/derive_rect_patch_datasets.py
+python scripts/train_rect_patch_ann.py
+
+Or run the whole rectangular path in one command:
+
+python scripts/run_rect_patch_pipeline.py
+
+To compare recipe-only vs family ANN on validated rectangular rows after training:
+
+python scripts/evaluate_rect_patch_ann.py
+
+Client-side logging helper now exists in:
+
+app/data/rect_patch_feedback_logger.py
+
+Use append_rect_patch_feedback_row(...) to write schema-compliant rows into:
+
+data/raw/rect_patch_feedback_v1.csv
 
 patch_length_mm: 5.0 to 80.0
 
@@ -408,22 +432,22 @@ This will create a clean supervised dataset instead of a chaotic one.
 Recommended perturbation strategy for collection
 To avoid narrow data:
 
-patch length perturbation: 
+patch length perturbation:
 ±
 15
 %
 ±15%
-patch width perturbation: 
+patch width perturbation:
 ±
 15
 %
 ±15%
-feed width perturbation: 
+feed width perturbation:
 ±
 20
 %
 ±20%
-feed offset y perturbation: 
+feed offset y perturbation:
 ±
 20
 %
@@ -493,12 +517,6 @@ Exact short handoff you can give to Copilot
 Use this verbatim if you want a tighter prompt:
 
 Implement a new rectangular-patch ANN pipeline for microstrip_patch with rectangular shape and fixed edge feed only. Add a raw CST feedback CSV schema at data/raw/rect_patch_feedback_v1.csv, validate it into data/validated/rect_patch_feedback_validated_v1.csv, derive rect_patch_inverse_train_v1.csv and rect_patch_forward_train_v1.csv, and train a family-specific inverse ANN rect_patch_inverse_v1 using inputs [target_frequency_ghz, target_bandwidth_mhz, substrate_epsilon_r, substrate_height_mm] and outputs [patch_length_mm, patch_width_mm, feed_width_mm, feed_offset_y_mm]. Keep the existing server contract unchanged: recipe logic should still fill the rest of the geometry, and the ANN should only override those 4 fields with bounds checking and recipe fallback.
-
-I’ve laid out the complete rectangular-patch dataset and ANN plan with exact file layout, column order, feature/output sets, training rules, and integration strategy for a Copilot handoff.
-
-Continued with Autopilot
-
-I produced a complete Copilot-ready plan for the rectangular-patch dataset and ANN pipeline, including exact file layout, CSV column order, feature/output sets, training flow, and integration constraints.
-
-Ready to hand to Copilot.
+I've laid out the complete rectangular-patch dataset and ANN plan with exact file layout, column order, feature/output sets, training rules, and integration strategy for a Copilot handoff.
+End of handoff.
 

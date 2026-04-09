@@ -5,6 +5,7 @@ from typing import Literal
 
 from app.ann.features import build_ann_feature_map
 from app.ann.predictor import AnnPredictor
+from app.antenna.recipes import generate_recipe
 from app.core.schemas import ClientCapabilities, DesignConstraints, OptimizeRequest, OptimizationPolicy, RuntimePreferences, TargetSpec
 
 
@@ -55,3 +56,25 @@ def test_predictor_uses_recipe_baseline_when_model_artifacts_are_missing(tmp_pat
     assert ann.optimizer_hint == "recipe_only"
     assert ann.dimensions.patch_radius_mm is not None
     assert ann.dimensions.patch_radius_mm > 0.0
+
+
+def test_predictor_selected_output_override_only_changes_modeled_dimensions() -> None:
+    recipe = generate_recipe(_request("rectangular"))
+    combined = AnnPredictor.merge_recipe_and_model_outputs(
+        recipe,
+        {
+            "patch_length_mm": 25.0,
+            "patch_width_mm": 34.0,
+            "feed_width_mm": 1.8,
+            "feed_offset_y_mm": -4.2,
+        },
+        "selected_output_override",
+    )
+
+    assert combined["patch_length_mm"] == 25.0
+    assert combined["patch_width_mm"] == 34.0
+    assert combined["feed_width_mm"] == 1.8
+    assert combined["feed_offset_y_mm"] == -4.2
+    assert combined["substrate_length_mm"] == recipe["dimensions"]["substrate_length_mm"]
+    assert combined["feed_length_mm"] == recipe["dimensions"]["feed_length_mm"]
+    assert combined["patch_radius_mm"] == 17.0

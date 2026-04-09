@@ -1,0 +1,103 @@
+{
+  "model_version": "rect_patch_formula_bootstrap_v2",
+  "family": "microstrip_patch",
+  "prediction_mode": "selected_output_override",
+  "input_columns": [
+    "target_frequency_ghz",
+    "target_bandwidth_mhz",
+    "substrate_epsilon_r",
+    "substrate_height_mm"
+  ],
+  "output_columns": [
+    "patch_length_mm",
+    "patch_width_mm",
+    "feed_width_mm",
+    "feed_offset_y_mm"
+  ],
+  "x_mean": [
+    3.5120222568511963,
+    164.5999755859375,
+    3.204599142074585,
+    1.905890941619873
+  ],
+  "x_std": [
+    1.441237449645996,
+    77.5809097290039,
+    0.9122190475463867,
+    0.6332234144210815
+  ],
+  "y_mean": [
+    29.94499969482422,
+    39.448081970214844,
+    2.298121452331543,
+    -9.429512977600098
+  ],
+  "y_std": [
+    17.531343460083008,
+    22.007509231567383,
+    1.3191221952438354,
+    5.606483459472656
+  ],
+  "train_rows": 10502,
+  "validation_rows": 2251,
+  "test_rows": 2251,
+  "best_validation_loss": 0.002831042278558016,
+  "train_mape": 3.0077388286590576,
+  "validation_mape": 3.0388753414154053,
+  "test_mape": 3.0673725605010986,
+  "fit_status": "balanced",
+  "train_mae": {
+    "patch_length_mm": 0.7578840255737305,
+    "patch_width_mm": 1.2433221340179443,
+    "feed_width_mm": 0.0534135140478611,
+    "feed_offset_y_mm": 0.36102452874183655
+  },
+  "validation_mae": {
+    "patch_length_mm": 0.798646867275238,
+    "patch_width_mm": 1.2234669923782349,
+    "feed_width_mm": 0.05199670419096947,
+    "feed_offset_y_mm": 0.3850342631340027
+  },
+  "test_mae": {
+    "patch_length_mm": 0.7737812995910645,
+    "patch_width_mm": 1.2759758234024048,
+    "feed_width_mm": 0.05560343712568283,
+    "feed_offset_y_mm": 0.3703174889087677
+  },
+  "train_mape_by_column": {
+    "patch_length_mm": 2.562203884124756,
+    "patch_width_mm": 3.2016186714172363,
+    "feed_width_mm": 2.3527719974517822,
+    "feed_offset_y_mm": 3.914360761642456
+  },
+  "validation_mape_by_column": {
+    "patch_length_mm": 2.6336960792541504,
+    "patch_width_mm": 3.1378135681152344,
+    "feed_width_mm": 2.3168225288391113,
+    "feed_offset_y_mm": 4.067169189453125
+  },
+  "test_mape_by_column": {
+    "patch_length_mm": 2.604314088821411,
+    "patch_width_mm": 3.2300572395324707,
+    "feed_width_mm": 2.417316198348999,
+    "feed_offset_y_mm": 4.0178022384643555
+  },
+  "safe_output_bounds": {
+    "patch_length_mm": [
+      5.0,
+      120.0
+    ],
+    "patch_width_mm": [
+      5.0,
+      120.0
+    ],
+    "feed_width_mm": [
+      0.4,
+      8.0
+    ],
+    "feed_offset_y_mm": [
+      -50.0,
+      0.0
+    ]
+  }
+}
