@@ -53,6 +53,7 @@ Returned values:
 
 - standard geometry in `ann_prediction.dimensions`
 - AMC lattice values in `ann_prediction.family_parameters`
+- AMC reflector geometry commands directly in `command_package.commands` (`amc_substrate`, `amc_ground`, `amc_cell_*`)
 
 #### WBAN
 
@@ -69,6 +70,7 @@ Returned values:
 
 - standard patch/substrate/feed values in `ann_prediction.dimensions`
 - body-aware slot/notch values in `ann_prediction.family_parameters`
+- WBAN guide parameters also mirrored into CST parameter definitions inside `command_package.commands`
 
 ---
 
@@ -177,7 +179,7 @@ Returned in `ann_prediction.family_parameters`:
 - `notch_width_mm`
 - `detuning_compensation_ratio`
 
-These values are the server-to-client contract for family-specific CST generation on the client side.
+These values are the server-to-client contract for family-specific CST generation on the client side. For AMC trial runs, the server now also emits the reflector cell array directly in the command package, which matches the client’s `run_amc_pipeline_once` workflow more closely.
 
 ---
 

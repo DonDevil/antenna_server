@@ -23,6 +23,8 @@ For `amc_patch`, the server keeps the radiating patch rectangular and computes A
 
 The server also expands the ground size to fit the recommended AMC array footprint.
 
+In the command planner, the server now emits the AMC reflector layer directly through existing `define_parameter`, `create_component`, and `define_brick` actions, so the client trial flow can execute an AMC-backed layout without having to synthesize the cell array itself first.
+
 ---
 
 ## Parameters returned to the client

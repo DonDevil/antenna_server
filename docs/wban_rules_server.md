@@ -21,6 +21,8 @@ For `wban_patch`, the server intentionally designs slightly above the requested 
 
 The server also recommends ground-slot and notch geometry using bounded ratios of the radiating patch size.
 
+For the current V2 command flow, the server emits WBAN body/slot/notch values as family parameters and CST parameters so the client can materialize any specialized WBAN geometry consistently during execution.
+
 Typical ranges encoded in the recipe:
 
 - `body_distance_mm`: roughly `2–10 mm`

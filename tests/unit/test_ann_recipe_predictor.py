@@ -10,6 +10,7 @@ from app.ann.features import build_ann_feature_map
 from app.ann.model import InverseAnnRegressor
 from app.ann.predictor import AnnPredictor
 from app.antenna.recipes import generate_recipe
+from app.commands.planner import build_command_package
 from app.core.schemas import ClientCapabilities, DesignConstraints, OptimizeRequest, OptimizationPolicy, RangeSpec, RuntimePreferences, TargetSpec
 
 
@@ -128,6 +129,34 @@ def test_predictor_routes_to_amc_and_wban_family_models() -> None:
     assert amc_prediction.family_parameters["amc_unit_cell_period_mm"] > 0.0
     assert wban_prediction.ann_model_version == "wban_patch_formula_bootstrap_v1"
     assert wban_prediction.family_parameters["ground_slot_length_mm"] > 0.0
+
+
+def test_command_package_emits_amc_geometry_and_wban_family_parameters() -> None:
+    predictor = AnnPredictor()
+
+    amc_request = _request("rectangular", antenna_family="amc_patch")
+    amc_prediction = predictor.predict(amc_request)
+    amc_package = build_command_package(amc_request, amc_prediction, session_id="sess-amc", trace_id="trace-amc")
+    amc_commands = amc_package["commands"]
+
+    assert any(str(cmd["params"].get("name", "")).startswith("amc_") for cmd in amc_commands if cmd["command"] == "define_parameter")
+    assert any(str((cmd.get("params") or {}).get("name", "")).startswith("amc_cell_") for cmd in amc_commands if cmd["command"] == "define_brick")
+
+    wban_request = _request(
+        "rectangular",
+        antenna_family="wban_patch",
+        design_constraints=DesignConstraints(
+            allowed_materials=["Copper (annealed)"],
+            allowed_substrates=["Rogers RT/duroid 5880"],
+            body_distance_mm=RangeSpec(min=4.0, max=6.0),
+            bending_radius_mm=RangeSpec(min=50.0, max=70.0),
+        ),
+    )
+    wban_prediction = predictor.predict(wban_request)
+    wban_package = build_command_package(wban_request, wban_prediction, session_id="sess-wban", trace_id="trace-wban")
+
+    assert wban_package["design_recipe"]["family_parameters"]["ground_slot_length_mm"] > 0.0
+    assert any(str(cmd["params"].get("name", "")) == "body_distance_mm" for cmd in wban_package["commands"] if cmd["command"] == "define_parameter")
 
 
 def test_predictor_warm_up_loads_checkpoint_with_non_default_hidden_dims(tmp_path: Path) -> None:

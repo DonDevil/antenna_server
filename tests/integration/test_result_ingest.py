@@ -167,3 +167,27 @@ def test_result_endpoint_routes_amc_and_wban_results_to_family_specific_files(tm
         assert data["dataset_feedback"]["storage_family"] == family
         assert data["dataset_feedback"]["valid_rows"] == 1
         assert paths[family].exists() is True
+
+
+def test_client_feedback_endpoint_aliases_result_ingest_for_amc(tmp_path: Path) -> None:
+    client, paths = _build_test_client(tmp_path)
+
+    optimize_response = client.post("/api/v1/optimize", json=_optimize_payload("amc_patch"))
+    assert optimize_response.status_code == 200
+    optimize_data = optimize_response.json()
+
+    response = client.post(
+        "/api/v1/client-feedback",
+        json=_feedback_payload(
+            session_id=optimize_data["session_id"],
+            trace_id=optimize_data["trace_id"],
+            design_id=optimize_data["command_package"]["design_id"],
+        ),
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["dataset_feedback"]["stored"] is True
+    assert data["dataset_feedback"]["storage_family"] == "amc_patch"
+    assert data["dataset_feedback"]["valid_rows"] == 1
+    assert paths["amc_patch"].exists() is True

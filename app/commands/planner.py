@@ -55,6 +55,56 @@ def _build_parameter_values(dims: dict[str, float]) -> dict[str, float]:
     return {param_name: float(dims[dim_name]) for param_name, dim_name in _PARAMETER_NAME_MAP}
 
 
+def _build_family_parameter_values(
+    *,
+    family: str,
+    recipe: dict[str, Any],
+    ann: AnnPrediction,
+    dims: dict[str, float],
+) -> dict[str, float]:
+    merged: dict[str, Any] = {}
+    if isinstance(recipe.get("family_parameters"), dict):
+        merged.update(cast(dict[str, Any], recipe["family_parameters"]))
+    ann_family_parameters = getattr(ann, "family_parameters", {}) or {}
+    if isinstance(ann_family_parameters, dict):
+        merged.update(dict(ann_family_parameters))
+
+    family_parameters: dict[str, float] = {}
+    for key, value in merged.items():
+        if isinstance(value, bool):
+            family_parameters[str(key)] = 1.0 if value else 0.0
+        elif isinstance(value, (int, float)):
+            family_parameters[str(key)] = float(value)
+
+    if family == "amc_patch":
+        period = float(family_parameters.get("amc_unit_cell_period_mm", max(6.0, dims["patch_width_mm"] * 0.48)))
+        patch_size = float(family_parameters.get("amc_patch_size_mm", max(4.0, period * 0.82)))
+        air_gap = float(family_parameters.get("amc_air_gap_mm", max(0.5, period * 0.12)))
+        rows = max(1, int(round(family_parameters.get("amc_array_rows", 5.0))))
+        cols = max(1, int(round(family_parameters.get("amc_array_cols", 5.0))))
+        family_parameters.update(
+            {
+                "amc_period": period,
+                "amc_cell": patch_size,
+                "amc_gap": float(family_parameters.get("amc_gap_mm", max(0.2, period - patch_size))),
+                "amc_air_gap": air_gap,
+                "amc_sub_h": float(dims["substrate_height_mm"]),
+                "amc_nx": float(cols),
+                "amc_ny": float(rows),
+                "amc_size_x": float(cols * period),
+                "amc_size_y": float(rows * period),
+            }
+        )
+    return family_parameters
+
+
+def _amc_cell_center_expr(index: int, count: int, period_symbol: str = "amc_period") -> str:
+    offset = index - ((count - 1) / 2.0)
+    if abs(offset) < 1e-9:
+        return "0"
+    return f"({offset:g}*{period_symbol})"
+
+
 def build_fixed_action_plan(
     request: OptimizeRequest,
     ann: AnnPrediction,
@@ -74,11 +124,25 @@ def build_fixed_action_plan(
     supports_farfield = bool(req_any.client_capabilities.supports_farfield_export)
 
     dims, recipe, patch_shape = _build_dimensions(request, ann)
+    family_name = str(req_any.target_spec.antenna_family).strip().lower()
     parameter_values = _build_parameter_values(dims)
+    family_parameter_values = _build_family_parameter_values(
+        family=family_name,
+        recipe=recipe,
+        ann=ann,
+        dims=dims,
+    )
     previous_parameter_values: dict[str, float] | None = None
+    previous_family_parameter_values: dict[str, float] | None = None
     if previous_ann is not None:
-        previous_dims, _, _ = _build_dimensions(request, previous_ann)
+        previous_dims, previous_recipe, _ = _build_dimensions(request, previous_ann)
         previous_parameter_values = _build_parameter_values(previous_dims)
+        previous_family_parameter_values = _build_family_parameter_values(
+            family=family_name,
+            recipe=previous_recipe,
+            ann=previous_ann,
+            dims=previous_dims,
+        )
 
     component_name = "antenna"
     actions: list[dict[str, Any]] = []
@@ -172,6 +236,16 @@ def build_fixed_action_plan(
                 expected_effects=[f"parameter_{param_name}_defined"],
             )
 
+        for param_name, param_value in family_parameter_values.items():
+            add_action(
+                "define_parameter",
+                "define_parameter",
+                {"name": param_name, "value": param_value},
+                checksum_scope="geometry",
+                rationale_tags=["family_geometry", f"family_parameter:{param_name}"],
+                expected_effects=[f"family_parameter_{param_name}_defined"],
+            )
+
         add_action(
             "define_brick",
             "define_brick",
@@ -253,6 +327,69 @@ def build_fixed_action_plan(
             rationale_tags=["parametric_geometry", "feed_matching"],
             expected_effects=["feedline_created"],
         )
+
+        if family_name == "amc_patch":
+            add_action(
+                "create_component",
+                "create_component",
+                {"component": "amc"},
+                checksum_scope="geometry",
+                rationale_tags=["family_geometry", "family:amc_patch"],
+                expected_effects=["amc_component_initialized"],
+            )
+            add_action(
+                "define_brick",
+                "define_brick",
+                {
+                    "name": "amc_substrate",
+                    "component": "amc",
+                    "material": allowed_substrate,
+                    "xrange": ["-amc_size_x/2", "amc_size_x/2"],
+                    "yrange": ["-amc_size_y/2", "amc_size_y/2"],
+                    "zrange": ["-t_cu-amc_air_gap-amc_sub_h", "-t_cu-amc_air_gap"],
+                },
+                checksum_scope="geometry",
+                rationale_tags=["family_geometry", "amc_reflector"],
+                expected_effects=["amc_substrate_created"],
+            )
+            add_action(
+                "define_brick",
+                "define_brick",
+                {
+                    "name": "amc_ground",
+                    "component": "amc",
+                    "material": allowed_material,
+                    "xrange": ["-amc_size_x/2", "amc_size_x/2"],
+                    "yrange": ["-amc_size_y/2", "amc_size_y/2"],
+                    "zrange": ["-t_cu-amc_air_gap-amc_sub_h-t_cu", "-t_cu-amc_air_gap-amc_sub_h"],
+                },
+                checksum_scope="geometry",
+                rationale_tags=["family_geometry", "amc_ground"],
+                expected_effects=["amc_ground_created"],
+            )
+
+            amc_rows = max(1, int(round(family_parameter_values.get("amc_array_rows", family_parameter_values.get("amc_ny", 5.0)))))
+            amc_cols = max(1, int(round(family_parameter_values.get("amc_array_cols", family_parameter_values.get("amc_nx", 5.0)))))
+            for col_idx in range(amc_cols):
+                x_center = _amc_cell_center_expr(col_idx, amc_cols)
+                for row_idx in range(amc_rows):
+                    y_center = _amc_cell_center_expr(row_idx, amc_rows)
+                    add_action(
+                        "define_brick",
+                        "define_brick",
+                        {
+                            "name": f"amc_cell_{col_idx}_{row_idx}",
+                            "component": "amc",
+                            "material": allowed_material,
+                            "xrange": [f"{x_center}-(amc_cell/2)", f"{x_center}+(amc_cell/2)"],
+                            "yrange": [f"{y_center}-(amc_cell/2)", f"{y_center}+(amc_cell/2)"],
+                            "zrange": ["-t_cu-amc_air_gap", "-amc_air_gap"],
+                        },
+                        checksum_scope="geometry",
+                        rationale_tags=["family_geometry", "amc_cell_array"],
+                        expected_effects=[f"amc_cell_{col_idx}_{row_idx}_created"],
+                    )
+
         add_action(
             "rebuild_model",
             "rebuild_model",
@@ -307,6 +444,15 @@ def build_fixed_action_plan(
                 if previous_value is None or abs(param_value - previous_value) > 1e-9:
                     changed_parameters.append((param_name, param_value))
 
+        changed_family_parameters: list[tuple[str, float]] = []
+        if previous_family_parameter_values is None:
+            changed_family_parameters = list(family_parameter_values.items())
+        else:
+            for param_name, param_value in family_parameter_values.items():
+                previous_value = previous_family_parameter_values.get(param_name)
+                if previous_value is None or abs(param_value - previous_value) > 1e-9:
+                    changed_family_parameters.append((param_name, param_value))
+
         for param_name, param_value in changed_parameters:
             add_action(
                 "update_parameter",
@@ -315,6 +461,16 @@ def build_fixed_action_plan(
                 checksum_scope="geometry",
                 rationale_tags=["parametric_delta", f"delta:{param_name}"],
                 expected_effects=[f"parameter_{param_name}_updated"],
+            )
+
+        for param_name, param_value in changed_family_parameters:
+            add_action(
+                "update_parameter",
+                "update_parameter",
+                {"name": param_name, "value": param_value},
+                checksum_scope="geometry",
+                rationale_tags=["family_delta", f"family_delta:{param_name}"],
+                expected_effects=[f"family_parameter_{param_name}_updated"],
             )
 
         add_action(
@@ -379,7 +535,7 @@ def build_fixed_action_plan(
         "units": {"geometry": "mm", "frequency": "ghz"},
         "predicted_dimensions": dims,
         "predicted_metrics": {
-            "center_frequency_ghz": target_frequency,
+            "center_frequency_ghz": float(family_parameter_values.get("design_frequency_ghz", target_frequency)),
             "bandwidth_mhz": target_bandwidth,
         },
         "design_recipe": {
