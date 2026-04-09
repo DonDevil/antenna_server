@@ -60,12 +60,13 @@ def train_rect_patch_inverse_ann(
     batch_size: int = 64,
     learning_rate: float = 1e-3,
     early_stopping_patience: int = 20,
+    min_rows_for_training: int = RECT_PATCH_DATA_SETTINGS.min_rows_for_training,
 ) -> RectPatchTrainingArtifacts:
     df = pd.read_csv(inverse_csv)
-    if len(df) < RECT_PATCH_DATA_SETTINGS.min_rows_for_training:
+    if len(df) < int(min_rows_for_training):
         raise ValueError(
             "Need at least "
-            f"{RECT_PATCH_DATA_SETTINGS.min_rows_for_training} validated rectangular-patch rows for training, "
+            f"{int(min_rows_for_training)} validated rectangular-patch rows for training, "
             f"found {len(df)}"
         )
 

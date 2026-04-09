@@ -4,6 +4,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, cast
 
+from app.ann.live_retraining import OnlineRetrainingManager
 from app.ann.predictor import AnnPredictor
 from app.commands.planner import build_command_package
 from app.core.feedback_features import derive_feedback_features
@@ -22,6 +23,7 @@ class CentralBrain:
 
     def __init__(self) -> None:
         self.ann_predictor = AnnPredictor()
+        self.live_retraining = OnlineRetrainingManager(predictor=self.ann_predictor)
         self.session_store = SessionStore()
 
     @staticmethod
@@ -245,6 +247,13 @@ class CentralBrain:
             "objective_state": objective_state,
         }
         session["history"].append(history_item)
+        dataset_feedback = self.live_retraining.ingest_result(
+            request=request,
+            ann_prediction=current_ann,
+            payload=payload,
+            evaluation=evaluation,
+        )
+        history_item["dataset_feedback"] = dataset_feedback
 
         if bool(evaluation["accepted"]):
             session["status"] = "completed"
@@ -269,6 +278,7 @@ class CentralBrain:
                 "stop_reason": "acceptance_criteria_met",
                 "evaluation": evaluation,
                 "objective_state": objective_state,
+                "dataset_feedback": dataset_feedback,
                 "message": "Acceptance criteria met. No further refinement needed.",
             }
 
@@ -297,6 +307,7 @@ class CentralBrain:
                 "stop_reason": "user_marked_done",
                 "evaluation": evaluation,
                 "objective_state": objective_state,
+                "dataset_feedback": dataset_feedback,
                 "message": "Session completed by explicit client request.",
             }
 
@@ -324,6 +335,7 @@ class CentralBrain:
                 "stop_reason": "max_iterations_reached",
                 "evaluation": evaluation,
                 "objective_state": objective_state,
+                "dataset_feedback": dataset_feedback,
                 "message": "Max iterations reached before acceptance.",
             }
 
@@ -399,6 +411,7 @@ class CentralBrain:
                 "focus_area": objective_state.get("focus_area"),
             },
             "objective_state": objective_state,
+            "dataset_feedback": dataset_feedback,
             "next_command_package": next_command_package,
             "message": "Generated refined command package for next iteration.",
         }

@@ -169,6 +169,7 @@ def health() -> dict[str, Any]:
         "ollama_reachable": ollama_reachable,
         "ann_message": ann_message,
         "llm_message": llm_message,
+        "live_retraining": brain.live_retraining.status(),
     }
 
 
@@ -478,8 +479,7 @@ def optimize(payload: dict[str, Any]) -> OptimizeResponse:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
-@app.post("/api/v1/client-feedback")
-def client_feedback(payload: dict[str, Any]) -> dict[str, Any]:
+def _process_client_result(payload: dict[str, Any]) -> dict[str, Any]:
     try:
         validate_contract("client_feedback", payload)
         result = brain.process_feedback(payload)
@@ -501,6 +501,16 @@ def client_feedback(payload: dict[str, Any]) -> dict[str, Any]:
         raise HTTPException(status_code=404, detail={"error_code": "SESSION_NOT_FOUND", "message": str(exc)}) from exc
     except Exception as exc:
         raise HTTPException(status_code=400, detail={"error_code": "FEEDBACK_PROCESSING_FAILED", "message": str(exc)}) from exc
+
+
+@app.post("/api/v1/client-feedback")
+def client_feedback(payload: dict[str, Any]) -> dict[str, Any]:
+    return _process_client_result(payload)
+
+
+@app.post("/api/v1/result")
+def ingest_result(payload: dict[str, Any]) -> dict[str, Any]:
+    return _process_client_result(payload)
 
 
 @app.get("/api/v1/sessions/{session_id}")

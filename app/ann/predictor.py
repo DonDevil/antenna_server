@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -33,6 +34,7 @@ class AnnPredictor:
         self._meta: dict[str, Any] | None = None
         self._loaded_artifacts: dict[tuple[Path, Path], tuple[InverseAnnRegressor, dict[str, Any]]] = {}
         self._last_error: str | None = None
+        self._load_lock = threading.RLock()
 
     def is_ready(self) -> bool:
         if self._dynamic_artifacts_enabled:
@@ -46,6 +48,14 @@ class AnnPredictor:
 
     def last_error(self) -> str | None:
         return self._last_error
+
+    def reload_artifacts(self) -> bool:
+        with self._load_lock:
+            self._model = None
+            self._meta = None
+            self._loaded_artifacts.clear()
+            self._last_error = None
+        return self.warm_up()
 
     def warm_up(self) -> bool:
         candidates = self._artifact_candidates_for_warmup()
@@ -97,33 +107,34 @@ class AnnPredictor:
         return tuple(width for _, width in layer_widths[:-1])
 
     def _load(self, *, checkpoint_path: Path, metadata_path: Path) -> tuple[InverseAnnRegressor, dict[str, Any]]:
-        cache_key = (checkpoint_path, metadata_path)
-        if cache_key in self._loaded_artifacts:
-            model, meta = self._loaded_artifacts[cache_key]
+        with self._load_lock:
+            cache_key = (checkpoint_path, metadata_path)
+            if cache_key in self._loaded_artifacts:
+                model, meta = self._loaded_artifacts[cache_key]
+                self._model = model
+                self._meta = meta
+                return model, meta
+
+            checkpoint = torch.load(checkpoint_path, map_location="cpu")
+            meta = json.loads(metadata_path.read_text(encoding="utf-8"))
+            state_dict = checkpoint["state_dict"]
+            hidden_dims = (
+                self._coerce_hidden_dims(checkpoint.get("hidden_dims"))
+                or self._coerce_hidden_dims(meta.get("hidden_dims") if isinstance(meta, dict) else None)
+                or self._infer_hidden_dims_from_state_dict(state_dict)
+            )
+            model = InverseAnnRegressor(
+                input_dim=int(checkpoint["input_dim"]),
+                output_dim=int(checkpoint["output_dim"]),
+                hidden_dims=hidden_dims or (64, 128, 64),
+            )
+            model.load_state_dict(state_dict)
+            model.eval()
             self._model = model
             self._meta = meta
+            self._loaded_artifacts[cache_key] = (model, meta)
+            self._last_error = None
             return model, meta
-
-        checkpoint = torch.load(checkpoint_path, map_location="cpu")
-        meta = json.loads(metadata_path.read_text(encoding="utf-8"))
-        state_dict = checkpoint["state_dict"]
-        hidden_dims = (
-            self._coerce_hidden_dims(checkpoint.get("hidden_dims"))
-            or self._coerce_hidden_dims(meta.get("hidden_dims") if isinstance(meta, dict) else None)
-            or self._infer_hidden_dims_from_state_dict(state_dict)
-        )
-        model = InverseAnnRegressor(
-            input_dim=int(checkpoint["input_dim"]),
-            output_dim=int(checkpoint["output_dim"]),
-            hidden_dims=hidden_dims or (64, 128, 64),
-        )
-        model.load_state_dict(state_dict)
-        model.eval()
-        self._model = model
-        self._meta = meta
-        self._loaded_artifacts[cache_key] = (model, meta)
-        self._last_error = None
-        return model, meta
 
     def _legacy_artifacts_ready(self) -> bool:
         return self.checkpoint_path.exists() and self.metadata_path.exists()

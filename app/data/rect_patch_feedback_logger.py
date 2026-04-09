@@ -41,12 +41,25 @@ def ensure_rect_patch_feedback_header(csv_path: Path = RECT_PATCH_DATA_SETTINGS.
         writer.writeheader()
 
 
+def _row_already_logged(run_id: str, csv_path: Path) -> bool:
+    if not csv_path.exists() or csv_path.stat().st_size == 0:
+        return False
+    with csv_path.open("r", newline="", encoding="utf-8") as handle:
+        reader = csv.DictReader(handle)
+        for existing in reader:
+            if str(existing.get("run_id", "")).strip() == str(run_id).strip():
+                return True
+    return False
+
+
 def append_rect_patch_feedback_row(
     row: dict[str, Any],
     csv_path: Path = RECT_PATCH_DATA_SETTINGS.raw_feedback_path,
 ) -> dict[str, Any]:
     normalized = validate_rect_patch_feedback_row(row)
     ensure_rect_patch_feedback_header(csv_path)
+    if _row_already_logged(str(normalized.get("run_id", "")), csv_path):
+        return normalized
     with csv_path.open("a", newline="", encoding="utf-8") as handle:
         writer = csv.DictWriter(handle, fieldnames=list(RECT_PATCH_FEEDBACK_COLUMNS))
         writer.writerow(normalized)

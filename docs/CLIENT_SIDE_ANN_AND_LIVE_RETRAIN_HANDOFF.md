@@ -4,14 +4,16 @@ _Date: 2026-04-09_
 
 ## Short answers
 
-- **Yes, keep using the same server API endpoints**:
+- **Keep using the same main optimize endpoint**:
   - `POST /api/v1/optimize`
+- **For CST results, you can now use either**:
   - `POST /api/v1/client-feedback`
-- **No new `/api/v2/...` endpoint was added.**
+  - `POST /api/v1/result` ← new result-ingest alias for product/client use
+- **There is still no new `/api/v2/...` HTTP endpoint.**
 - The **returned CST command package is already V2** (`cst_command_package.v2`), but the HTTP API stays under `/api/v1/...`.
 - **Rectangular microstrip ANN is wired into the server optimize path.**
 - **AMC and WBAN family-specific ANNs are trained on disk, but they are not yet fully routed as production family-specific predictors in the server response path.**
-- **Live CST retraining is not automatic yet**; right now it is **manual / batch retraining** using the same endpoint data and training scripts.
+- **Automatic live retraining is now enabled for rectangular microstrip result ingestion**: after enough validated rows accumulate, the server retrains in the background and reloads the ANN live.
 
 ---
 
@@ -75,16 +77,17 @@ So today:
 
 ## Do we need a new endpoint?
 
-**No.**
+**A dedicated result endpoint is now available, but the API version stays the same.**
 
-The client should continue to use:
+The client can use:
 
 - `POST /api/v1/optimize` to start or resume a design session
-- `POST /api/v1/client-feedback` to send CST results back
+- `POST /api/v1/client-feedback` to send CST results back through the normal iteration flow
+- `POST /api/v1/result` to send CST results through the same processing flow while explicitly using the product-style result-ingest route
 - `GET /api/v1/sessions/{session_id}` to inspect current session state
 - `WS /api/v1/sessions/{session_id}/stream` for live updates
 
-There is **no `/api/v2/optimize` or `/api/v2/client-feedback`**.
+There is still **no `/api/v2/optimize` or `/api/v2/client-feedback`**.
 
 > Important distinction: the **API stays V1**, but the **returned CST command package already uses the V2 command contract**.
 
@@ -201,15 +204,26 @@ That is already supported by the existing `POST /api/v1/client-feedback` route.
 
 ## How to do live CST retrain
 
-## Current state: manual / batch retrain
+## Current state: online result ingestion + automatic background retrain
 
-Right now, live retraining is **not automatic on every feedback call**.
+Live retraining is now **automatic for rectangular microstrip result ingestion**.
 
 What exists today:
 - training scripts
 - 15k bootstrap datasets
 - saved family ANN checkpoints
 - rect-patch client calibration merge
+- automatic result logging from `POST /api/v1/result` and `POST /api/v1/client-feedback`
+- automatic background retraining trigger for validated rectangular patch rows
+
+### Automatic trigger behavior
+
+For the currently supported online-training path:
+
+- each rectangular microstrip CST result is logged
+- the row is validated into the retraining dataset pipeline
+- once **50 new valid rows** have accumulated, background retraining is triggered automatically
+- the server then **reloads the ANN live** without needing to restart the API process
 
 ### Manual retrain commands
 
@@ -240,23 +254,29 @@ Family-by-family:
 If you want practical live retraining with CST runs, do this:
 
 ### A. Keep the same client API calls
-- Client **does not need a new endpoint**
-- Keep posting to `/api/v1/client-feedback`
+- Client should use **one result route per CST run** to avoid unnecessary repeat processing
+- Recommended product route: `/api/v1/result`
+- `/api/v1/client-feedback` still works and uses the same server logic
 
-### B. After each successful CST run, log a training row
-For rectangular patch, a logging helper already exists:
-
-- `app/data/rect_patch_feedback_logger.py`
-
-That can write rows into:
+### B. After each successful CST run, the server now logs a family-specific training row
+Implemented storage/validation paths now include:
 
 - `data/raw/rect_patch_feedback_v1.csv`
-
-### C. For AMC and WBAN, add the same kind of family logger
-Recommended files to add later:
-
 - `data/raw/amc_patch_feedback_v1.csv`
 - `data/raw/wban_patch_feedback_v1.csv`
+
+Matching validators/builders now exist for:
+
+- rectangular microstrip patch feedback
+- AMC patch feedback
+- WBAN patch feedback
+
+### C. Shared ledger deduplication is active
+The shared result ledger at:
+
+- `data/raw/live_results_v1.jsonl`
+
+now deduplicates repeated ingests for the same CST result key, so sending the exact same result twice will not create duplicate ledger entries.
 
 ### D. Retrain after every small batch of new accepted rows
 Recommended thresholds:
@@ -268,26 +288,21 @@ The server already loads from model files on disk, so retraining can overwrite t
 
 ---
 
-## What is still missing for fully automatic live retrain
+## What is still missing for full multi-family automatic retrain
 
-To make it truly automatic, the server still needs one more wiring step:
+The automatic online retrain path is now implemented for the **rectangular microstrip** family, and **AMC/WBAN now have separate feedback files plus validators**.
 
-1. Inside `brain.process_feedback(...)`, after a successful CST result:
-   - derive a family-specific training row from:
-     - original request
-     - current ANN / geometry
-     - feedback metrics
-     - artifact refs
-2. append that row to the family CSV
-3. if `new_rows_since_last_train >= threshold`, start a background retrain job
-4. atomically replace the model files on success
-5. keep the same `/api/v1/optimize` endpoint
+What is still missing for complete production coverage across all families:
+
+1. automatic AMC/WBAN retraining promotion into the live runtime model path
+2. family-specific runtime ANN routing for those new checkpoints
+3. broader artifact parsing if you want richer retrain signals beyond the current summary metrics
 
 ### In other words
-- **same API**
-- **same client contract**
-- **background retrain job on the server**
-- **no new endpoint needed**
+- **same API version**
+- **new `POST /api/v1/result` route available**
+- **background retrain job on the server is active for supported rect-patch feedback**
+- **AMC/WBAN full online retraining remains the next step**
 
 ---
 
@@ -307,7 +322,7 @@ To make it truly automatic, the server still needs one more wiring step:
 
 ### Not yet fully automatic
 - AMC and WBAN family-specific ANN routing into the production response path
-- automatic live retrain trigger on every new CST feedback batch
+- AMC and WBAN family-specific online retraining/data logging
 
 ---
 
@@ -335,4 +350,4 @@ Client-side Copilot should:
 
 ## One-line summary
 
-**No new endpoint is needed: the client should keep using `/api/v1/optimize` and `/api/v1/client-feedback`; the rectangular-patch ANN is already wired, AMC/WBAN models are trained but not yet fully promoted in the live server path, and live CST retraining is currently batch/manual rather than fully automatic.**
+**Use `/api/v1/optimize` for design generation and `/api/v1/result` (or `/api/v1/client-feedback`) for CST results; the rectangular-patch ANN is already wired, rectangular live retraining now runs automatically in the background after 50 validated rows, and AMC/WBAN full online retraining is the remaining next step.**

@@ -123,6 +123,20 @@ class RectPatchDataSettings:
 
 
 @dataclass(frozen=True)
+class AmcPatchDataSettings:
+    raw_feedback_path: Path = DATA_DIR / "raw" / "amc_patch_feedback_v1.csv"
+    validated_feedback_path: Path = DATA_DIR / "validated" / "amc_patch_feedback_validated_v1.csv"
+    rejected_feedback_path: Path = DATA_DIR / "rejected" / "amc_patch_feedback_rejected_v1.csv"
+
+
+@dataclass(frozen=True)
+class WbanPatchDataSettings:
+    raw_feedback_path: Path = DATA_DIR / "raw" / "wban_patch_feedback_v1.csv"
+    validated_feedback_path: Path = DATA_DIR / "validated" / "wban_patch_feedback_validated_v1.csv"
+    rejected_feedback_path: Path = DATA_DIR / "rejected" / "wban_patch_feedback_rejected_v1.csv"
+
+
+@dataclass(frozen=True)
 class Bounds:
     frequency_ghz: tuple[float, float] = (0.5, 10.0)
     bandwidth_mhz: tuple[float, float] = (5.0, 2000.0)
@@ -145,4 +159,6 @@ ANN_SETTINGS = AnnSettings()
 RECT_PATCH_ANN_SETTINGS = RectPatchAnnSettings()
 DATA_SETTINGS = DataSettings()
 RECT_PATCH_DATA_SETTINGS = RectPatchDataSettings()
+AMC_PATCH_DATA_SETTINGS = AmcPatchDataSettings()
+WBAN_PATCH_DATA_SETTINGS = WbanPatchDataSettings()
 BOUNDS = Bounds()
