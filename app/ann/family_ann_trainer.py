@@ -150,7 +150,8 @@ def train_family_ann_model(
     train_x = torch.tensor(x_scaled[train_idx], dtype=torch.float32)
     test_x = torch.tensor(x_scaled[test_idx], dtype=torch.float32)
 
-    model = InverseAnnRegressor(input_dim=x.shape[1], output_dim=y.shape[1], hidden_dims=(128, 256, 128))
+    hidden_dims = (128, 256, 128)
+    model = InverseAnnRegressor(input_dim=x.shape[1], output_dim=y.shape[1], hidden_dims=hidden_dims)
     optimizer = cast(torch.optim.Optimizer, torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay=1e-5))
     criterion = nn.HuberLoss(delta=1.0)
 
@@ -205,6 +206,7 @@ def train_family_ann_model(
             "state_dict": model.state_dict(),
             "input_dim": int(x.shape[1]),
             "output_dim": int(y.shape[1]),
+            "hidden_dims": list(hidden_dims),
         },
         spec.checkpoint_path,
     )
@@ -213,6 +215,7 @@ def train_family_ann_model(
         "model_version": spec.model_version,
         "family": spec.family,
         "prediction_mode": "selected_output_override",
+        "hidden_dims": list(hidden_dims),
         "input_columns": list(spec.input_columns),
         "output_columns": list(spec.output_columns),
         "x_mean": x_mean.tolist(),

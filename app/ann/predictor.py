@@ -52,17 +52,49 @@ class AnnPredictor:
         if not candidates:
             self._last_error = "ann_artifacts_missing"
             return False
-        try:
-            for checkpoint_path, metadata_path in candidates:
+
+        load_errors: list[str] = []
+        loaded_any = False
+        for checkpoint_path, metadata_path in candidates:
+            try:
                 self._load(checkpoint_path=checkpoint_path, metadata_path=metadata_path)
-        except Exception as exc:
+                loaded_any = True
+            except Exception as exc:
+                load_errors.append(f"{checkpoint_path.parent.name}: {exc}")
+
+        if not loaded_any:
             self._model = None
             self._meta = None
             self._loaded_artifacts.clear()
-            self._last_error = str(exc)
+            self._last_error = " | ".join(load_errors) if load_errors else "ann_model_unavailable"
             return False
+
         self._last_error = None
-        return self.is_loaded()
+        return True
+
+    @staticmethod
+    def _coerce_hidden_dims(raw_value: Any) -> tuple[int, ...] | None:
+        if not isinstance(raw_value, (list, tuple)) or not raw_value:
+            return None
+        if not all(isinstance(value, (int, float)) for value in raw_value):
+            return None
+        return tuple(int(value) for value in raw_value)
+
+    @classmethod
+    def _infer_hidden_dims_from_state_dict(cls, state_dict: dict[str, Any]) -> tuple[int, ...] | None:
+        layer_widths: list[tuple[int, int]] = []
+        for name, value in state_dict.items():
+            if not name.startswith("net.") or not name.endswith(".weight") or getattr(value, "ndim", None) != 2:
+                continue
+            try:
+                layer_index = int(name.split(".")[1])
+            except (IndexError, ValueError):
+                continue
+            layer_widths.append((layer_index, int(value.shape[0])))
+        if len(layer_widths) <= 1:
+            return None
+        layer_widths.sort(key=lambda item: item[0])
+        return tuple(width for _, width in layer_widths[:-1])
 
     def _load(self, *, checkpoint_path: Path, metadata_path: Path) -> tuple[InverseAnnRegressor, dict[str, Any]]:
         cache_key = (checkpoint_path, metadata_path)
@@ -74,11 +106,18 @@ class AnnPredictor:
 
         checkpoint = torch.load(checkpoint_path, map_location="cpu")
         meta = json.loads(metadata_path.read_text(encoding="utf-8"))
+        state_dict = checkpoint["state_dict"]
+        hidden_dims = (
+            self._coerce_hidden_dims(checkpoint.get("hidden_dims"))
+            or self._coerce_hidden_dims(meta.get("hidden_dims") if isinstance(meta, dict) else None)
+            or self._infer_hidden_dims_from_state_dict(state_dict)
+        )
         model = InverseAnnRegressor(
             input_dim=int(checkpoint["input_dim"]),
             output_dim=int(checkpoint["output_dim"]),
+            hidden_dims=hidden_dims or (64, 128, 64),
         )
-        model.load_state_dict(checkpoint["state_dict"])
+        model.load_state_dict(state_dict)
         model.eval()
         self._model = model
         self._meta = meta

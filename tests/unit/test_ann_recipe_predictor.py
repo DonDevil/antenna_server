@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Literal
 
+import torch
+
 from app.ann.features import build_ann_feature_map
+from app.ann.model import InverseAnnRegressor
 from app.ann.predictor import AnnPredictor
 from app.antenna.recipes import generate_recipe
 from app.core.schemas import ClientCapabilities, DesignConstraints, OptimizeRequest, OptimizationPolicy, RuntimePreferences, TargetSpec
@@ -78,3 +82,48 @@ def test_predictor_selected_output_override_only_changes_modeled_dimensions() ->
     assert combined["substrate_length_mm"] == recipe["dimensions"]["substrate_length_mm"]
     assert combined["feed_length_mm"] == recipe["dimensions"]["feed_length_mm"]
     assert combined["patch_radius_mm"] == 17.0
+
+
+def test_predictor_warm_up_loads_checkpoint_with_non_default_hidden_dims(tmp_path: Path) -> None:
+    checkpoint_path = tmp_path / "inverse_ann.pt"
+    metadata_path = tmp_path / "metadata.json"
+    model = InverseAnnRegressor(input_dim=4, output_dim=4, hidden_dims=(128, 256, 128))
+    torch.save(
+        {
+            "state_dict": model.state_dict(),
+            "input_dim": 4,
+            "output_dim": 4,
+        },
+        checkpoint_path,
+    )
+    metadata_path.write_text(
+        json.dumps(
+            {
+                "model_version": "test_family_model",
+                "input_columns": [
+                    "target_frequency_ghz",
+                    "target_bandwidth_mhz",
+                    "substrate_epsilon_r",
+                    "substrate_height_mm",
+                ],
+                "output_columns": [
+                    "patch_length_mm",
+                    "patch_width_mm",
+                    "feed_width_mm",
+                    "feed_offset_y_mm",
+                ],
+                "x_mean": [0.0, 0.0, 0.0, 0.0],
+                "x_std": [1.0, 1.0, 1.0, 1.0],
+                "y_mean": [0.0, 0.0, 0.0, 0.0],
+                "y_std": [1.0, 1.0, 1.0, 1.0],
+                "prediction_mode": "selected_output_override",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    predictor = AnnPredictor(checkpoint_path=checkpoint_path, metadata_path=metadata_path)
+
+    assert predictor.warm_up() is True
+    assert predictor.is_loaded() is True
+    assert predictor.last_error() is None

@@ -126,7 +126,14 @@ def health() -> dict[str, Any]:
 
     ann_artifacts_ready = brain.ann_predictor.is_ready()
     ann_loaded = brain.ann_predictor.is_loaded()
-    if ann_loaded:
+    if ann_artifacts_ready and not ann_loaded:
+        ann_loaded = brain.ann_predictor.warm_up()
+        if ann_loaded:
+            _set_runtime_health(ann_status="available", ann_message="ann_model_loaded")
+        else:
+            ann_error = brain.ann_predictor.last_error() or "ann_model_unavailable"
+            _set_runtime_health(ann_status="none", ann_message=ann_error)
+    elif ann_loaded:
         _set_runtime_health(ann_status="available", ann_message="ann_model_loaded")
 
     ollama_reachable = check_ollama_health(timeout_sec=1)

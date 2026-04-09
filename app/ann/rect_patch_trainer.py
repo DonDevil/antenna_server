@@ -90,7 +90,8 @@ def train_rect_patch_inverse_ann(
     val_y = torch.tensor(y_scaled[val_idx], dtype=torch.float32)
     test_x = torch.tensor(x_scaled[test_idx], dtype=torch.float32)
 
-    model = InverseAnnRegressor(input_dim=x.shape[1], output_dim=y.shape[1])
+    hidden_dims = (64, 128, 64)
+    model = InverseAnnRegressor(input_dim=x.shape[1], output_dim=y.shape[1], hidden_dims=hidden_dims)
     optimizer = cast(torch.optim.Optimizer, torch.optim.Adam(model.parameters(), lr=learning_rate))
     criterion = nn.HuberLoss(delta=1.0)
 
@@ -140,6 +141,7 @@ def train_rect_patch_inverse_ann(
             "state_dict": model.state_dict(),
             "input_dim": int(x.shape[1]),
             "output_dim": int(y.shape[1]),
+            "hidden_dims": list(hidden_dims),
         },
         checkpoint_path,
     )
@@ -151,6 +153,7 @@ def train_rect_patch_inverse_ann(
         "feed_type": RECT_PATCH_ANN_SETTINGS.feed_type,
         "feature_schema_version": "rect_patch_feedback.v1",
         "prediction_mode": "selected_output_override",
+        "hidden_dims": list(hidden_dims),
         "input_columns": list(RECT_PATCH_INVERSE_INPUT_COLUMNS),
         "output_columns": list(RECT_PATCH_INVERSE_OUTPUT_COLUMNS),
         "x_mean": x_mean.tolist(),
