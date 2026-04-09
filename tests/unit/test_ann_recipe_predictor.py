@@ -10,23 +10,29 @@ from app.ann.features import build_ann_feature_map
 from app.ann.model import InverseAnnRegressor
 from app.ann.predictor import AnnPredictor
 from app.antenna.recipes import generate_recipe
-from app.core.schemas import ClientCapabilities, DesignConstraints, OptimizeRequest, OptimizationPolicy, RuntimePreferences, TargetSpec
+from app.core.schemas import ClientCapabilities, DesignConstraints, OptimizeRequest, OptimizationPolicy, RangeSpec, RuntimePreferences, TargetSpec
 
 
 PatchShape = Literal["rectangular", "circular"]
 
 
-def _request(patch_shape: PatchShape = "rectangular") -> OptimizeRequest:
+def _request(
+    patch_shape: PatchShape = "rectangular",
+    *,
+    antenna_family: str = "microstrip_patch",
+    design_constraints: DesignConstraints | None = None,
+) -> OptimizeRequest:
     return OptimizeRequest(
         schema_version="optimize_request.v1",
-        user_request=f"Design a {patch_shape} microstrip patch antenna at 2.45 GHz",
+        user_request=f"Design a {patch_shape} {antenna_family} antenna at 2.45 GHz",
         target_spec=TargetSpec(
             frequency_ghz=2.45,
             bandwidth_mhz=90.0,
-            antenna_family="microstrip_patch",
+            antenna_family=antenna_family,
             patch_shape=patch_shape,
         ),
-        design_constraints=DesignConstraints(
+        design_constraints=design_constraints
+        or DesignConstraints(
             allowed_materials=["Copper (annealed)"],
             allowed_substrates=["Rogers RT/duroid 5880"],
         ),
@@ -82,6 +88,46 @@ def test_predictor_selected_output_override_only_changes_modeled_dimensions() ->
     assert combined["substrate_length_mm"] == recipe["dimensions"]["substrate_length_mm"]
     assert combined["feed_length_mm"] == recipe["dimensions"]["feed_length_mm"]
     assert combined["patch_radius_mm"] == 17.0
+
+
+def test_feature_map_uses_wban_body_and_bending_constraints() -> None:
+    request = _request(
+        "rectangular",
+        antenna_family="wban_patch",
+        design_constraints=DesignConstraints(
+            allowed_materials=["Copper (annealed)"],
+            allowed_substrates=["Rogers RT/duroid 5880"],
+            body_distance_mm=RangeSpec(min=4.0, max=6.0),
+            bending_radius_mm=RangeSpec(min=50.0, max=70.0),
+        ),
+    )
+
+    features = build_ann_feature_map(request)
+
+    assert features["body_distance_mm"] == 5.0
+    assert features["bending_radius_mm"] == 60.0
+
+
+def test_generate_recipe_exposes_amc_and_wban_family_parameters() -> None:
+    amc_recipe = generate_recipe(_request("rectangular", antenna_family="amc_patch"))
+    wban_recipe = generate_recipe(_request("rectangular", antenna_family="wban_patch"))
+
+    assert amc_recipe["recipe_name"] == "amc_backed_rectangular_patch"
+    assert amc_recipe["family_parameters"]["amc_unit_cell_period_mm"] > 0.0
+    assert wban_recipe["recipe_name"] == "wban_detuned_rectangular_patch"
+    assert wban_recipe["family_parameters"]["design_frequency_ghz"] > 2.45
+
+
+def test_predictor_routes_to_amc_and_wban_family_models() -> None:
+    predictor = AnnPredictor()
+
+    amc_prediction = predictor.predict(_request("rectangular", antenna_family="amc_patch"))
+    wban_prediction = predictor.predict(_request("rectangular", antenna_family="wban_patch"))
+
+    assert amc_prediction.ann_model_version == "amc_patch_formula_bootstrap_v1"
+    assert amc_prediction.family_parameters["amc_unit_cell_period_mm"] > 0.0
+    assert wban_prediction.ann_model_version == "wban_patch_formula_bootstrap_v1"
+    assert wban_prediction.family_parameters["ground_slot_length_mm"] > 0.0
 
 
 def test_predictor_warm_up_loads_checkpoint_with_non_default_hidden_dims(tmp_path: Path) -> None:

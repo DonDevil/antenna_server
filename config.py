@@ -105,6 +105,16 @@ class RectPatchAnnSettings:
 
 
 @dataclass(frozen=True)
+class FamilyAnnSettings:
+    model_version: str
+    family: str
+    patch_shape: str
+    model_dir: Path
+    checkpoint_path: Path
+    metadata_path: Path
+
+
+@dataclass(frozen=True)
 class DataSettings:
     raw_dataset_path: Path = DATA_DIR / "raw" / "dataset.csv"
     validated_dataset_path: Path = DATA_DIR / "validated" / "dataset_validated.csv"
@@ -157,6 +167,22 @@ OLLAMA_SETTINGS = OllamaSettings()
 PLANNER_SETTINGS = PlannerSettings()
 ANN_SETTINGS = AnnSettings()
 RECT_PATCH_ANN_SETTINGS = RectPatchAnnSettings()
+AMC_PATCH_ANN_SETTINGS = FamilyAnnSettings(
+    model_version="amc_patch_v1",
+    family="amc_patch",
+    patch_shape="rectangular",
+    model_dir=MODELS_DIR / "ann" / "amc_patch_v1",
+    checkpoint_path=MODELS_DIR / "ann" / "amc_patch_v1" / "inverse_ann.pt",
+    metadata_path=MODELS_DIR / "ann" / "amc_patch_v1" / "metadata.json",
+)
+WBAN_PATCH_ANN_SETTINGS = FamilyAnnSettings(
+    model_version="wban_patch_v1",
+    family="wban_patch",
+    patch_shape="rectangular",
+    model_dir=MODELS_DIR / "ann" / "wban_patch_v1",
+    checkpoint_path=MODELS_DIR / "ann" / "wban_patch_v1" / "inverse_ann.pt",
+    metadata_path=MODELS_DIR / "ann" / "wban_patch_v1" / "metadata.json",
+)
 DATA_SETTINGS = DataSettings()
 RECT_PATCH_DATA_SETTINGS = RectPatchDataSettings()
 AMC_PATCH_DATA_SETTINGS = AmcPatchDataSettings()

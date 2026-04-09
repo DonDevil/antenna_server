@@ -389,6 +389,10 @@ def build_fixed_action_plan(
             "recipe_name": str(recipe.get("recipe_name", "unknown_recipe")),
             "substrate": recipe.get("substrate"),
             "notes": recipe.get("notes", []),
+            "family_parameters": {
+                **(recipe.get("family_parameters", {}) if isinstance(recipe.get("family_parameters"), dict) else {}),
+                **dict(getattr(ann, "family_parameters", {}) or {}),
+            },
         },
         "actions": actions,
         "expected_exports": ["s_parameters", "summary_metrics"] + (["farfield"] if supports_farfield else []),

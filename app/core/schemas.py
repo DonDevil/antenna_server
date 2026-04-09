@@ -24,6 +24,10 @@ class TargetSpec(BaseModel):
     patch_shape: Literal["auto", "rectangular", "circular"] = "auto"
     feed_type: Literal["auto", "edge", "inset", "coaxial"] = "auto"
     polarization: Literal["linear", "circular", "dual", "unspecified"] = "unspecified"
+    center_tolerance_mhz: float | None = Field(default=None, ge=0)
+    min_return_loss_db: float | None = None
+    max_vswr: float | None = Field(default=None, ge=1.0)
+    target_gain_dbi: float | None = None
 
 
 class DesignConstraints(BaseModel):
@@ -35,8 +39,12 @@ class DesignConstraints(BaseModel):
     substrate_height_mm: RangeSpec | None = None
     feed_length_mm: RangeSpec | None = None
     feed_width_mm: RangeSpec | None = None
+    body_distance_mm: RangeSpec | None = None
+    bending_radius_mm: RangeSpec | None = None
+    amc_air_gap_mm: RangeSpec | None = None
     allowed_materials: list[str] = Field(default_factory=lambda: ["Copper (annealed)"])
     allowed_substrates: list[str] = Field(default_factory=lambda: ["FR-4 (lossy)"])
+    manufacturing_notes: list[str] = Field(default_factory=list)
 
 
 class AcceptanceSpec(BaseModel):
@@ -123,6 +131,7 @@ class AnnPrediction(BaseModel):
     recipe_name: str | None = None
     patch_shape: str | None = None
     optimizer_hint: str | None = None
+    family_parameters: dict[str, int | float | str | bool] = Field(default_factory=dict)
 
 
 class OptimizeResponse(BaseModel):

@@ -91,6 +91,12 @@
         "optimizer_hint": {
           "type": ["string", "null"]
         },
+        "family_parameters": {
+          "type": "object",
+          "additionalProperties": {
+            "type": ["number", "integer", "string", "boolean"]
+          }
+        },
         "dimensions": {
           "$ref": "#/$defs/dimensions"
         }

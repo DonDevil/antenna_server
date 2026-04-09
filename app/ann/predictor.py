@@ -22,7 +22,7 @@ from app.core.schemas import (
     RuntimePreferences,
     TargetSpec,
 )
-from config import ANN_SETTINGS, BOUNDS, RECT_PATCH_ANN_SETTINGS
+from config import AMC_PATCH_ANN_SETTINGS, ANN_SETTINGS, BOUNDS, RECT_PATCH_ANN_SETTINGS, WBAN_PATCH_ANN_SETTINGS
 
 
 class AnnPredictor:
@@ -140,16 +140,21 @@ class AnnPredictor:
         return self.checkpoint_path.exists() and self.metadata_path.exists()
 
     @staticmethod
-    def _rect_patch_artifacts_ready() -> bool:
-        return RECT_PATCH_ANN_SETTINGS.checkpoint_path.exists() and RECT_PATCH_ANN_SETTINGS.metadata_path.exists()
+    def _family_artifact_settings() -> tuple[Any, ...]:
+        return (RECT_PATCH_ANN_SETTINGS, AMC_PATCH_ANN_SETTINGS, WBAN_PATCH_ANN_SETTINGS)
+
+    @classmethod
+    def _family_artifacts_ready(cls, settings: Any) -> bool:
+        return settings.checkpoint_path.exists() and settings.metadata_path.exists()
 
     def _artifact_candidates_for_warmup(self) -> list[tuple[Path, Path]]:
         if not self._dynamic_artifacts_enabled:
             return [(self.checkpoint_path, self.metadata_path)] if self._legacy_artifacts_ready() else []
 
         candidates: list[tuple[Path, Path]] = []
-        if self._rect_patch_artifacts_ready():
-            candidates.append((RECT_PATCH_ANN_SETTINGS.checkpoint_path, RECT_PATCH_ANN_SETTINGS.metadata_path))
+        for settings in self._family_artifact_settings():
+            if self._family_artifacts_ready(settings):
+                candidates.append((settings.checkpoint_path, settings.metadata_path))
         if self._legacy_artifacts_ready():
             candidates.append((self.checkpoint_path, self.metadata_path))
         return candidates
@@ -159,15 +164,17 @@ class AnnPredictor:
             return [(self.checkpoint_path, self.metadata_path)] if self._legacy_artifacts_ready() else []
 
         candidates: list[tuple[Path, Path]] = []
+        family_name = str(request.target_spec.antenna_family).strip().lower()
         patch_shape = resolve_patch_shape(request)
         feed_type = str(getattr(request.target_spec, "feed_type", "auto") or "auto").strip().lower()
-        if (
-            str(request.target_spec.antenna_family).strip().lower() == RECT_PATCH_ANN_SETTINGS.family
-            and patch_shape == RECT_PATCH_ANN_SETTINGS.patch_shape
-            and feed_type in {"auto", RECT_PATCH_ANN_SETTINGS.feed_type}
-            and self._rect_patch_artifacts_ready()
-        ):
-            candidates.append((RECT_PATCH_ANN_SETTINGS.checkpoint_path, RECT_PATCH_ANN_SETTINGS.metadata_path))
+
+        for settings in self._family_artifact_settings():
+            if family_name != settings.family or patch_shape != settings.patch_shape or not self._family_artifacts_ready(settings):
+                continue
+            if getattr(settings, "feed_type", None) is not None and feed_type not in {"auto", str(settings.feed_type)}:
+                continue
+            candidates.append((settings.checkpoint_path, settings.metadata_path))
+
         if self._legacy_artifacts_ready():
             candidates.append((self.checkpoint_path, self.metadata_path))
         return candidates
@@ -187,6 +194,43 @@ class AnnPredictor:
         )
 
     @staticmethod
+    def _recipe_family_parameters(recipe: dict[str, Any]) -> dict[str, int | float | str | bool]:
+        raw = recipe.get("family_parameters", {}) if isinstance(recipe.get("family_parameters"), dict) else {}
+        clean: dict[str, int | float | str | bool] = {}
+        for key, value in raw.items():
+            if isinstance(value, bool):
+                clean[str(key)] = value
+            elif isinstance(value, int):
+                clean[str(key)] = int(value)
+            elif isinstance(value, float):
+                clean[str(key)] = float(value)
+            elif isinstance(value, str):
+                clean[str(key)] = value
+        return clean
+
+    @classmethod
+    def _merge_family_parameters(
+        cls,
+        recipe: dict[str, Any],
+        model_values: dict[str, float],
+        metadata_bounds: dict[str, Any] | None = None,
+    ) -> dict[str, int | float | str | bool]:
+        family_parameters = cls._recipe_family_parameters(recipe)
+        for name, predicted in model_values.items():
+            if name in ANN_SETTINGS.output_columns:
+                continue
+            value = float(predicted)
+            bounds = cls._resolve_output_bounds(name, metadata_bounds)
+            if bounds is not None:
+                value = max(bounds[0], min(bounds[1], value))
+            template = family_parameters.get(name)
+            if isinstance(template, int) and not isinstance(template, bool):
+                family_parameters[name] = int(round(value))
+            else:
+                family_parameters[name] = float(value)
+        return family_parameters
+
+    @staticmethod
     def _baseline_result(request: OptimizeRequest, recipe: dict[str, Any], *, model_version: str, confidence: float, hint: str) -> AnnPrediction:
         dims = dict(recipe["dimensions"])
         return AnnPrediction(
@@ -196,6 +240,7 @@ class AnnPredictor:
             recipe_name=str(recipe.get("recipe_name")),
             patch_shape=str(recipe.get("patch_shape")),
             optimizer_hint=hint,
+            family_parameters=AnnPredictor._recipe_family_parameters(recipe),
         )
 
     @staticmethod
@@ -306,6 +351,11 @@ class AnnPredictor:
                     recipe_name=str(recipe.get("recipe_name")),
                     patch_shape=str(recipe.get("patch_shape")),
                     optimizer_hint=hint,
+                    family_parameters=self._merge_family_parameters(
+                        recipe,
+                        model_values,
+                        meta.get("safe_output_bounds") if isinstance(meta.get("safe_output_bounds"), dict) else None,
+                    ),
                 )
             except Exception as exc:
                 self._last_error = str(exc)

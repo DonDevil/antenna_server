@@ -126,6 +126,15 @@
         "feed_width_mm": {
           "$ref": "#/$defs/range"
         },
+        "body_distance_mm": {
+          "$ref": "#/$defs/range"
+        },
+        "bending_radius_mm": {
+          "$ref": "#/$defs/range"
+        },
+        "amc_air_gap_mm": {
+          "$ref": "#/$defs/range"
+        },
         "allowed_materials": {
           "type": "array",
           "minItems": 1,

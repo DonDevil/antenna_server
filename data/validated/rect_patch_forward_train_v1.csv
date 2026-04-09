@@ -1,0 +1,3 @@
+target_frequency_ghz,target_bandwidth_mhz,substrate_epsilon_r,substrate_height_mm,patch_length_mm,patch_width_mm,feed_width_mm,feed_offset_y_mm,actual_center_frequency_ghz,actual_bandwidth_mhz,actual_return_loss_db,actual_vswr,actual_gain_dbi,actual_radiation_efficiency_pct,actual_total_efficiency_pct,actual_directivity_dbi,actual_front_to_back_db,actual_axial_ratio_db
+2.45,100.0,2.2,2.4,39.74038696289063,49.52958679199219,2.961895227432251,-11.660110473632812,2.768,14.0,-12.174,1.6533,-14.805,0.0,0.0,-14.805,0.0,30.0
+2.45,100.0,2.2,2.4,39.74038696289063,49.52958679199219,2.961895227432251,-11.660110473632812,2.768,14.0,-12.174,1.6533,-14.805,0.0,0.0,-14.805,0.0,30.0
