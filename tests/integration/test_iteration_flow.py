@@ -145,8 +145,9 @@ def test_optimize_feedback_refine_complete_and_query(tmp_path: Path) -> None:
     optimize_data = optimize_response.json()
     assert isinstance(optimize_data["objective_state"], dict)
     assert optimize_data["objective_state"]["primary"]["s11"]["status"] == "pending"
-    assert optimize_data["ann_prediction"]["ann_model_version"] == "amc_patch_formula_bootstrap_v1"
-    assert optimize_data["ann_prediction"]["family_parameters"]["amc_unit_cell_period_mm"] > 0.0
+    assert optimize_data["ann_prediction"]["ann_model_version"] == "amc_client_local_implementation"
+    assert optimize_data["ann_prediction"]["family_parameters"] == {}
+    assert any(cmd["command"] == "implement_amc" for cmd in optimize_data["command_package"]["commands"])
     assert len(optimize_data["warnings"]) >= 3
     assert "surrogate_confidence=" in optimize_data["warnings"][0]
     assert "surrogate_residuals:" in optimize_data["warnings"][1]
@@ -230,7 +231,7 @@ def test_optimize_feedback_refine_complete_and_query(tmp_path: Path) -> None:
     assert manifest["manifest_version"] == "artifact_manifest.v1"
     assert manifest["request_schema_version"] == "optimize_request.v1"
     assert manifest["command_schema_version"] == "cst_command_package.v2"
-    assert manifest["ann_model_version"] == "amc_patch_formula_bootstrap_v1"
+    assert manifest["ann_model_version"] == "amc_client_local_implementation"
     assert manifest["latest_iteration_index"] == 1
     assert isinstance(manifest["latest_command_package_checksum_sha256"], str)
     assert len(manifest["latest_command_package_checksum_sha256"]) == 64

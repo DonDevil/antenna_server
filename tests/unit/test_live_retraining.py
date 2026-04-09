@@ -153,7 +153,7 @@ def _noop_trainer(**_: object) -> None:
     return None
 
 
-def test_online_retraining_manager_triggers_amc_and_wban_live_retraining(tmp_path: Path) -> None:
+def test_online_retraining_manager_keeps_amc_feedback_storage_only_and_triggers_wban_live_retraining(tmp_path: Path) -> None:
     amc_calls: list[int] = []
     wban_calls: list[int] = []
 
@@ -200,9 +200,8 @@ def test_online_retraining_manager_triggers_amc_and_wban_live_retraining(tmp_pat
     )
 
     assert amc_info["stored"] is True
-    assert amc_info["retrain_triggered"] is True
-    assert amc_info["families"]["amc_patch"]["last_trained_valid_rows"] == 1
-    assert len(amc_calls) == 1
+    assert amc_info["retrain_triggered"] is False
+    assert len(amc_calls) == 0
 
     assert wban_info["stored"] is True
     assert wban_info["retrain_triggered"] is True

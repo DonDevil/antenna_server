@@ -335,27 +335,6 @@ def default_family_specs() -> dict[str, FamilyAnnSpec]:
                 "feed_offset_y_mm": (-50.0, 0.0),
             },
         ),
-        "amc_patch": FamilyAnnSpec(
-            family="amc_patch",
-            model_version="amc_patch_formula_bootstrap_v1",
-            dataset_path=DATA_DIR / "raw" / "amc_patch_formula_synth_v1.csv",
-            model_dir=MODELS_DIR / "ann" / "amc_patch_v1",
-            input_columns=(
-                "target_frequency_ghz",
-                "target_bandwidth_mhz",
-                "target_minimum_gain_dbi",
-                "substrate_epsilon_r",
-                "substrate_height_mm",
-            ),
-            output_columns=(
-                "amc_unit_cell_period_mm",
-                "amc_patch_size_mm",
-                "amc_gap_mm",
-                "amc_via_radius_mm",
-                "amc_air_gap_mm",
-            ),
-            min_rows=2000,
-        ),
         "wban_patch": FamilyAnnSpec(
             family="wban_patch",
             model_version="wban_patch_formula_bootstrap_v1",

@@ -15,7 +15,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Generate formula-based synthetic datasets for the antenna ANN families.")
     parser.add_argument(
         "--family",
-        choices=["all", "microstrip_patch", "amc_patch", "wban_patch"],
+        choices=["all", "microstrip_patch", "wban_patch"],
         default="all",
         help="Family to generate. Use 'all' to create all three datasets.",
     )

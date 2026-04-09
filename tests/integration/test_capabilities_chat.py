@@ -66,10 +66,46 @@ def test_chat_naturally_summarizes_ready_requirements(tmp_path: Path) -> None:
     assert data["ready_to_start_pipeline"] is True
     assert data["captured_details"]["antenna_family"] == "microstrip_patch"
     assert data["captured_details"]["patch_shape"] == "rectangular"
+    assert data["requirements"]["allowed_substrates"] == ["FR-4 (lossy)"]
+    assert data["requirements"]["allowed_materials"] == ["Copper (annealed)"]
     assert isinstance(data["assistant_message"], str)
     assert "3" in data["assistant_message"]
     assert "100" in data["assistant_message"]
     assert "microstrip" in data["assistant_message"].lower()
+
+
+def test_chat_remembers_material_choices_across_turns(tmp_path: Path) -> None:
+    client = _build_test_client(tmp_path)
+
+    first = client.post(
+        "/api/v1/chat",
+        json={
+            "session_id": "chat-material-memory",
+            "message": "Use Rogers RT/duroid 5880 as the substrate and copper as the conductor for a microstrip patch antenna.",
+            "requirements": {},
+        },
+    )
+    assert first.status_code == 200
+    first_data = first.json()
+    assert first_data["requirements"]["allowed_substrates"] == ["Rogers RT/duroid 5880"]
+    assert first_data["requirements"]["allowed_materials"] == ["Copper (annealed)"]
+
+    second = client.post(
+        "/api/v1/chat",
+        json={
+            "session_id": "chat-material-memory",
+            "message": "Make it 2.45 GHz with 120 MHz bandwidth.",
+            "requirements": {},
+        },
+    )
+    assert second.status_code == 200
+    second_data = second.json()
+
+    assert second_data["captured_details"]["substrate_material"] == "Rogers RT/duroid 5880"
+    assert second_data["captured_details"]["conductor_material"] == "Copper (annealed)"
+    assert second_data["requirements"]["allowed_substrates"] == ["Rogers RT/duroid 5880"]
+    assert second_data["requirements"]["allowed_materials"] == ["Copper (annealed)"]
+    assert second_data["ready_to_start_pipeline"] is True
 
 
 def test_health_endpoint_reports_dependency_statuses(tmp_path: Path) -> None:

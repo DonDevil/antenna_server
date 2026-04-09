@@ -80,7 +80,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Generate larger family datasets, train the three family ANNs, and report fit quality.")
     parser.add_argument(
         "--family",
-        choices=["all", "microstrip_patch", "amc_patch", "wban_patch"],
+        choices=["all", "microstrip_patch", "wban_patch"],
         default="all",
         help="Which family to train. Default: all three.",
     )

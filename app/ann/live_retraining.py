@@ -22,7 +22,6 @@ from app.data.family_feedback import (
 from app.data.rect_patch_feedback import build_rect_patch_datasets
 from app.data.rect_patch_feedback_logger import append_rect_patch_feedback_row
 from config import (
-    AMC_PATCH_ANN_SETTINGS,
     AMC_PATCH_DATA_SETTINGS,
     DATA_DIR,
     RECT_PATCH_ANN_SETTINGS,
@@ -50,22 +49,6 @@ def _train_family_live_ann(
         min_rows=max(1, int(min_rows_for_training)),
     )
     return train_family_ann_model(spec)
-
-
-def _train_amc_patch_live_ann(
-    *,
-    validated_csv: Path,
-    checkpoint_path: Path,
-    metadata_path: Path,
-    min_rows_for_training: int,
-) -> Any:
-    return _train_family_live_ann(
-        "amc_patch",
-        validated_csv=validated_csv,
-        checkpoint_path=checkpoint_path,
-        metadata_path=metadata_path,
-        min_rows_for_training=min_rows_for_training,
-    )
 
 
 def _train_wban_patch_live_ann(
@@ -105,7 +88,7 @@ class OnlineRetrainingManager:
         retrain_trigger_row_count: int = 50,
         min_valid_rows_for_training: int = 50,
         trainer: Callable[..., Any] = train_rect_patch_inverse_ann,
-        amc_trainer: Callable[..., Any] = _train_amc_patch_live_ann,
+        amc_trainer: Callable[..., Any] | None = None,
         wban_trainer: Callable[..., Any] = _train_wban_patch_live_ann,
         async_retraining: bool = True,
     ) -> None:
@@ -509,13 +492,6 @@ class OnlineRetrainingManager:
                     metadata_path=RECT_PATCH_ANN_SETTINGS.metadata_path,
                     min_rows_for_training=self.min_valid_rows_for_training,
                 )
-            elif family == "amc_patch":
-                self.amc_trainer(
-                    validated_csv=self.amc_validated_feedback_path,
-                    checkpoint_path=AMC_PATCH_ANN_SETTINGS.checkpoint_path,
-                    metadata_path=AMC_PATCH_ANN_SETTINGS.metadata_path,
-                    min_rows_for_training=self.min_valid_rows_for_training,
-                )
             elif family == "wban_patch":
                 self.wban_trainer(
                     validated_csv=self.wban_validated_feedback_path,
@@ -545,6 +521,9 @@ class OnlineRetrainingManager:
                 self._save_state()
 
     def _trigger_retraining_if_needed(self, family: str, valid_rows: int) -> bool:
+        if family == "amc_patch":
+            return False
+
         with self._lock:
             if valid_rows < self.min_valid_rows_for_training:
                 return False
@@ -601,7 +580,7 @@ class OnlineRetrainingManager:
                 return {
                     "stored": True,
                     "ledger_stored": ledger_stored,
-                    "reason": "stored_for_future_retraining",
+                    "reason": "stored_for_reference_feedback_only",
                     "storage_family": "amc_patch",
                     "dataset_path": str(self.amc_raw_feedback_path),
                     "valid_rows": int(artifacts.valid_rows),

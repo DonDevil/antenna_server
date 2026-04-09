@@ -182,6 +182,7 @@
             "define_parameter",
             "update_parameter",
             "set_parameter",
+            "implement_amc",
             "rebuild_model",
             "define_brick",
             "define_cylinder",

@@ -22,7 +22,7 @@ from app.core.schemas import (
     RuntimePreferences,
     TargetSpec,
 )
-from config import AMC_PATCH_ANN_SETTINGS, ANN_SETTINGS, BOUNDS, RECT_PATCH_ANN_SETTINGS, WBAN_PATCH_ANN_SETTINGS
+from config import ANN_SETTINGS, BOUNDS, RECT_PATCH_ANN_SETTINGS, WBAN_PATCH_ANN_SETTINGS
 
 
 class AnnPredictor:
@@ -141,7 +141,7 @@ class AnnPredictor:
 
     @staticmethod
     def _family_artifact_settings() -> tuple[Any, ...]:
-        return (RECT_PATCH_ANN_SETTINGS, AMC_PATCH_ANN_SETTINGS, WBAN_PATCH_ANN_SETTINGS)
+        return (RECT_PATCH_ANN_SETTINGS, WBAN_PATCH_ANN_SETTINGS)
 
     @classmethod
     def _family_artifacts_ready(cls, settings: Any) -> bool:
@@ -196,6 +196,10 @@ class AnnPredictor:
     @staticmethod
     def _recipe_family_parameters(recipe: dict[str, Any]) -> dict[str, int | float | str | bool]:
         raw = recipe.get("family_parameters", {}) if isinstance(recipe.get("family_parameters"), dict) else {}
+        recipe_name = str(recipe.get("recipe_name", "")).strip().lower()
+        if recipe_name == "amc_backed_rectangular_patch" or "amc_unit_cell_period_mm" in raw:
+            return {}
+
         clean: dict[str, int | float | str | bool] = {}
         for key, value in raw.items():
             if isinstance(value, bool):
@@ -304,6 +308,16 @@ class AnnPredictor:
     def predict(self, payload: OptimizeRequest | TargetSpec) -> AnnPrediction:
         request = self._coerce_request(payload)
         recipe = generate_recipe(request)
+        family_name = str(request.target_spec.antenna_family).strip().lower()
+
+        if family_name == "amc_patch":
+            return self._baseline_result(
+                request,
+                recipe,
+                model_version="amc_client_local_implementation",
+                confidence=0.78,
+                hint="client_implement_amc",
+            )
 
         candidates = self._artifact_candidates_for_request(request)
         if not candidates:

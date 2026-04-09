@@ -8,9 +8,9 @@
 - CST results can be posted to either `POST /api/v1/client-feedback` or `POST /api/v1/result`.
 - There is still **no** `/api/v2/...` HTTP endpoint.
 - The CST command package remains `cst_command_package.v2`.
-- Rectangular microstrip, AMC, and WBAN family ANNs are now routed in the optimize path.
-- AMC and WBAN-specific outputs are returned in `ann_prediction.family_parameters`.
-- Automatic live retraining is now active for **rectangular microstrip, AMC, and WBAN** feedback once the family-specific validation threshold is reached.
+- Rectangular microstrip and WBAN family ANNs are still routed in the optimize path.
+- AMC now uses a **client-local** `implement_amc` command instead of server-side AMC ANN prediction.
+- Automatic live retraining remains active for **rectangular microstrip and WBAN**; AMC feedback is stored but not retrained.
 
 ---
 
@@ -44,16 +44,11 @@ Used for:
 
 - `antenna_family = amc_patch`
 
-Artifacts:
+Behavior:
 
-- `models/ann/amc_patch_v1/inverse_ann.pt`
-- `models/ann/amc_patch_v1/metadata.json`
-
-Returned values:
-
-- standard geometry in `ann_prediction.dimensions`
-- AMC lattice values in `ann_prediction.family_parameters`
-- AMC reflector geometry commands directly in `command_package.commands` (`amc_substrate`, `amc_ground`, `amc_cell_*`)
+- standard patch geometry still comes back in `ann_prediction.dimensions`
+- `ann_prediction.family_parameters` is intentionally empty for AMC
+- the command package includes `implement_amc`, which the updated client expands locally using its own AMC heuristic
 
 #### WBAN
 
@@ -95,7 +90,7 @@ Use `optimize_request.v1` as before.
 Set `target_spec.antenna_family` to one of:
 
 - `microstrip_patch`
-- `amc_patch`
+- `amc_patch` (uses `implement_amc` in the returned command package)
 - `wban_patch`
 
 Optional family-aware hints can now be supplied through `design_constraints`:

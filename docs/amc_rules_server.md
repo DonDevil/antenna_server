@@ -2,11 +2,11 @@
 
 ## Scope
 
-This file adapts the client AMC rules for the server-side flow. The server does **not** build CST commands anymore; it now focuses on:
+This file adapts the client AMC rules for the server-side flow. The server now focuses on:
 
-- generating AMC-aware geometry priors
-- returning AMC lattice parameters to the client
-- storing AMC feedback for future retraining
+- generating the base rectangular patch dimensions
+- asking the client to build the AMC locally through `implement_amc`
+- storing AMC feedback for reference only
 
 ---
 
@@ -23,37 +23,23 @@ For `amc_patch`, the server keeps the radiating patch rectangular and computes A
 
 The server also expands the ground size to fit the recommended AMC array footprint.
 
-In the command planner, the server now emits the AMC reflector layer directly through existing `define_parameter`, `create_component`, and `define_brick` actions, so the client trial flow can execute an AMC-backed layout without having to synthesize the cell array itself first.
+In the command planner, the server now emits a single `implement_amc` command after the patch/feed geometry is defined. The updated client expands that command locally using its own AMC heuristic, which currently performs better than the retired server-side AMC ANN output.
 
 ---
 
 ## Parameters returned to the client
 
-Standard patch geometry is still returned in `ann_prediction.dimensions`, and AMC-specific values are returned in `ann_prediction.family_parameters`:
-
-| Field | Meaning |
-| --- | --- |
-| `amc_unit_cell_period_mm` | AMC lattice period |
-| `amc_patch_size_mm` | conductive patch side within the unit cell |
-| `amc_gap_mm` | separation between adjacent AMC cells |
-| `amc_via_radius_mm` | via radius for mushroom-style AMC realizations |
-| `amc_via_height_mm` | via height, usually tied to substrate height |
-| `amc_ground_size_mm` | recommended total ground size |
-| `amc_array_rows` | recommended row count |
-| `amc_array_cols` | recommended column count |
-| `amc_air_gap_mm` | air-gap recommendation |
-| `reflection_phase_target_deg` | target AMC reflection phase center |
+For `amc_patch`, the server now returns the standard patch geometry in `ann_prediction.dimensions` and keeps `ann_prediction.family_parameters` empty. The AMC reflector itself is requested through the extra `implement_amc` command in the command package.
 
 ---
 
 ## Runtime ANN status
 
-The AMC family ANN is now routed in the optimize path and loaded from:
+The AMC family ANN is no longer used in the optimize path. AMC now follows a **recipe + client-local implementation** path:
 
-- `models/ann/amc_patch_v1/inverse_ann.pt`
-- `models/ann/amc_patch_v1/metadata.json`
-
-The model predicts the AMC lattice terms while the server recipe preserves safe baseline patch dimensions.
+- the server sizes the radiating patch safely
+- the command package includes `implement_amc`
+- the client expands the AMC reflector using its local implementation
 
 ---
 
@@ -63,6 +49,6 @@ The model predicts the AMC lattice terms while the server recipe preserves safe 
 - validated: `data/validated/amc_patch_feedback_validated_v1.csv`
 - rejected: `data/rejected/amc_patch_feedback_rejected_v1.csv`
 
-Once enough valid AMC rows accumulate, the server can now retrain the AMC family ANN automatically and reload it live.
+AMC feedback is still stored in the family CSVs, but automatic AMC ANN retraining is disabled because the client-local AMC implementation is now the preferred path.
 
 Schema contract: `schemas/data/amc_patch_feedback.v1.json`

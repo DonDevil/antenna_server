@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import threading
+import uuid
 from datetime import datetime, timezone
 from typing import Any
 
@@ -40,6 +41,8 @@ _runtime_health: dict[str, Any] = {
     "llm_status": "none",
     "llm_message": "warmup_not_started",
 }
+_chat_memory_lock = threading.Lock()
+_chat_requirements_memory: dict[str, dict[str, Any]] = {}
 
 
 def _set_runtime_health(**updates: Any) -> None:
@@ -187,6 +190,59 @@ def _first_non_empty_string(value: Any) -> str | None:
     return text or None
 
 
+def _coerce_string_list(value: Any) -> list[str]:
+    if isinstance(value, list):
+        return [str(item).strip() for item in value if str(item).strip()]
+    if value is None:
+        return []
+    text = str(value).strip()
+    return [text] if text else []
+
+
+def _requirements_from_saved_session(session_payload: dict[str, Any]) -> dict[str, Any]:
+    request_payload = session_payload.get("request", {}) if isinstance(session_payload.get("request"), dict) else {}
+    target_spec = request_payload.get("target_spec", {}) if isinstance(request_payload.get("target_spec"), dict) else {}
+    design_constraints = (
+        request_payload.get("design_constraints", {})
+        if isinstance(request_payload.get("design_constraints"), dict)
+        else {}
+    )
+    allowed_substrates = _coerce_string_list(design_constraints.get("allowed_substrates"))
+    allowed_materials = _coerce_string_list(design_constraints.get("allowed_materials"))
+    return {
+        "frequency_ghz": target_spec.get("frequency_ghz"),
+        "bandwidth_mhz": target_spec.get("bandwidth_mhz"),
+        "antenna_family": target_spec.get("antenna_family"),
+        "patch_shape": target_spec.get("patch_shape"),
+        "substrate_material": _first_non_empty_string(allowed_substrates),
+        "conductor_material": _first_non_empty_string(allowed_materials),
+        "allowed_substrates": allowed_substrates,
+        "allowed_materials": allowed_materials,
+        "design_constraints": design_constraints,
+        "target_spec": target_spec,
+    }
+
+
+def _hydrate_chat_requirements(session_id: str | None, current_requirements: dict[str, Any]) -> dict[str, Any]:
+    merged: dict[str, Any] = {}
+    if session_id:
+        try:
+            merged.update(_requirements_from_saved_session(session_store.load(session_id)))
+        except FileNotFoundError:
+            pass
+        with _chat_memory_lock:
+            remembered = _chat_requirements_memory.get(session_id, {})
+            if isinstance(remembered, dict):
+                merged.update(dict(remembered))
+    merged.update(current_requirements)
+    return merged
+
+
+def _store_chat_requirements(session_id: str, requirements: dict[str, Any]) -> None:
+    with _chat_memory_lock:
+        _chat_requirements_memory[session_id] = dict(requirements)
+
+
 def _merge_chat_requirements(intent: dict[str, Any], current_requirements: dict[str, Any]) -> dict[str, Any]:
     target_spec = current_requirements.get("target_spec", {}) if isinstance(current_requirements.get("target_spec"), dict) else {}
     design_constraints = (
@@ -202,23 +258,42 @@ def _merge_chat_requirements(intent: dict[str, Any], current_requirements: dict[
     parsed_substrate_material = intent.get("parsed_substrate_material")
     parsed_conductor_material = intent.get("parsed_conductor_material")
 
+    substrate_material = (
+        parsed_substrate_material
+        or current_requirements.get("substrate_material")
+        or _first_non_empty_string(current_requirements.get("allowed_substrates"))
+        or _first_non_empty_string(design_constraints.get("allowed_substrates"))
+    )
+    conductor_material = (
+        parsed_conductor_material
+        or current_requirements.get("conductor_material")
+        or _first_non_empty_string(current_requirements.get("allowed_materials"))
+        or _first_non_empty_string(design_constraints.get("allowed_materials"))
+    )
+    allowed_substrates = [substrate_material] if substrate_material else _coerce_string_list(current_requirements.get("allowed_substrates")) or _coerce_string_list(design_constraints.get("allowed_substrates"))
+    allowed_materials = [conductor_material] if conductor_material else _coerce_string_list(current_requirements.get("allowed_materials")) or _coerce_string_list(design_constraints.get("allowed_materials"))
+
     merged = {
         "frequency_ghz": parsed_freq if parsed_freq is not None else current_requirements.get("frequency_ghz", target_spec.get("frequency_ghz")),
         "bandwidth_mhz": parsed_bw if parsed_bw is not None else current_requirements.get("bandwidth_mhz", target_spec.get("bandwidth_mhz")),
         "antenna_family": parsed_family if parsed_family is not None else current_requirements.get("antenna_family", target_spec.get("antenna_family")),
         "patch_shape": parsed_patch_shape if parsed_patch_shape is not None else current_requirements.get("patch_shape", target_spec.get("patch_shape")),
-        "substrate_material": (
-            parsed_substrate_material
-            or current_requirements.get("substrate_material")
-            or _first_non_empty_string(current_requirements.get("allowed_substrates"))
-            or _first_non_empty_string(design_constraints.get("allowed_substrates"))
-        ),
-        "conductor_material": (
-            parsed_conductor_material
-            or current_requirements.get("conductor_material")
-            or _first_non_empty_string(current_requirements.get("allowed_materials"))
-            or _first_non_empty_string(design_constraints.get("allowed_materials"))
-        ),
+        "substrate_material": substrate_material,
+        "conductor_material": conductor_material,
+        "allowed_substrates": allowed_substrates,
+        "allowed_materials": allowed_materials,
+        "design_constraints": {
+            **(design_constraints if isinstance(design_constraints, dict) else {}),
+            "allowed_substrates": allowed_substrates,
+            "allowed_materials": allowed_materials,
+        },
+        "target_spec": {
+            **(target_spec if isinstance(target_spec, dict) else {}),
+            "frequency_ghz": parsed_freq if parsed_freq is not None else current_requirements.get("frequency_ghz", target_spec.get("frequency_ghz")),
+            "bandwidth_mhz": parsed_bw if parsed_bw is not None else current_requirements.get("bandwidth_mhz", target_spec.get("bandwidth_mhz")),
+            "antenna_family": parsed_family if parsed_family is not None else current_requirements.get("antenna_family", target_spec.get("antenna_family")),
+            "patch_shape": parsed_patch_shape if parsed_patch_shape is not None else current_requirements.get("patch_shape", target_spec.get("patch_shape")),
+        },
     }
     return merged
 
@@ -356,6 +431,10 @@ def chat(payload: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(current_requirements, dict):
         current_requirements = {}
 
+    raw_session_id = payload.get("session_id")
+    session_id = str(raw_session_id).strip() if raw_session_id is not None and str(raw_session_id).strip() else f"chat-{uuid.uuid4()}"
+    current_requirements = _hydrate_chat_requirements(session_id, current_requirements)
+
     intent = summarize_user_intent(user_message)
     capabilities_catalog = load_capabilities_catalog()
     supported_families = capabilities_catalog.get("supported_families", list_supported_families())
@@ -365,6 +444,7 @@ def chat(payload: dict[str, Any]) -> dict[str, Any]:
     substrate_materials = capabilities_catalog.get("available_substrate_materials", [])
 
     merged = _merge_chat_requirements(intent, current_requirements)
+    _store_chat_requirements(session_id, merged)
     missing_required = _missing_required_chat_fields(merged)
     text = user_message.lower()
     pipeline_requested = any(
@@ -431,6 +511,7 @@ def chat(payload: dict[str, Any]) -> dict[str, Any]:
 
     return {
         "status": "ok",
+        "session_id": session_id,
         "assistant_message": assistant_message,
         "intent_summary": intent,
         "requirements": merged,

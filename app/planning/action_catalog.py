@@ -109,6 +109,19 @@ ACTION_CATALOG: dict[str, Any] = {
             ],
         },
         {
+            "action": "implement_amc",
+            "command": "implement_amc",
+            "description": "Ask the client to synthesize AMC reflector geometry locally after the base patch is created.",
+            "phase": "geometry",
+            "prerequisites": ["create_feedline"],
+            "incompatible_with": [],
+            "parameter_definitions": [
+                {"name": "component", "type": "string", "required": True, "min_length": 1},
+                {"name": "strategy", "type": "string", "required": False, "min_length": 1},
+                {"name": "relative_to", "type": "string", "required": False, "min_length": 1}
+            ],
+        },
+        {
             "action": "rebuild_model",
             "command": "rebuild_model",
             "description": "Trigger a CST model rebuild after parameter mutations and before simulation/export.",

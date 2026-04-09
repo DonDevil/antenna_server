@@ -62,6 +62,9 @@ def _build_family_parameter_values(
     ann: AnnPrediction,
     dims: dict[str, float],
 ) -> dict[str, float]:
+    if family == "amc_patch":
+        return {}
+
     merged: dict[str, Any] = {}
     if isinstance(recipe.get("family_parameters"), dict):
         merged.update(cast(dict[str, Any], recipe["family_parameters"]))
@@ -330,65 +333,17 @@ def build_fixed_action_plan(
 
         if family_name == "amc_patch":
             add_action(
-                "create_component",
-                "create_component",
-                {"component": "amc"},
-                checksum_scope="geometry",
-                rationale_tags=["family_geometry", "family:amc_patch"],
-                expected_effects=["amc_component_initialized"],
-            )
-            add_action(
-                "define_brick",
-                "define_brick",
+                "implement_amc",
+                "implement_amc",
                 {
-                    "name": "amc_substrate",
                     "component": "amc",
-                    "material": allowed_substrate,
-                    "xrange": ["-amc_size_x/2", "amc_size_x/2"],
-                    "yrange": ["-amc_size_y/2", "amc_size_y/2"],
-                    "zrange": ["-t_cu-amc_air_gap-amc_sub_h", "-t_cu-amc_air_gap"],
+                    "strategy": "client_heuristic",
+                    "relative_to": "patch",
                 },
                 checksum_scope="geometry",
-                rationale_tags=["family_geometry", "amc_reflector"],
-                expected_effects=["amc_substrate_created"],
+                rationale_tags=["family_geometry", "family:amc_patch", "client_local_amc"],
+                expected_effects=["amc_geometry_created_by_client"],
             )
-            add_action(
-                "define_brick",
-                "define_brick",
-                {
-                    "name": "amc_ground",
-                    "component": "amc",
-                    "material": allowed_material,
-                    "xrange": ["-amc_size_x/2", "amc_size_x/2"],
-                    "yrange": ["-amc_size_y/2", "amc_size_y/2"],
-                    "zrange": ["-t_cu-amc_air_gap-amc_sub_h-t_cu", "-t_cu-amc_air_gap-amc_sub_h"],
-                },
-                checksum_scope="geometry",
-                rationale_tags=["family_geometry", "amc_ground"],
-                expected_effects=["amc_ground_created"],
-            )
-
-            amc_rows = max(1, int(round(family_parameter_values.get("amc_array_rows", family_parameter_values.get("amc_ny", 5.0)))))
-            amc_cols = max(1, int(round(family_parameter_values.get("amc_array_cols", family_parameter_values.get("amc_nx", 5.0)))))
-            for col_idx in range(amc_cols):
-                x_center = _amc_cell_center_expr(col_idx, amc_cols)
-                for row_idx in range(amc_rows):
-                    y_center = _amc_cell_center_expr(row_idx, amc_rows)
-                    add_action(
-                        "define_brick",
-                        "define_brick",
-                        {
-                            "name": f"amc_cell_{col_idx}_{row_idx}",
-                            "component": "amc",
-                            "material": allowed_material,
-                            "xrange": [f"{x_center}-(amc_cell/2)", f"{x_center}+(amc_cell/2)"],
-                            "yrange": [f"{y_center}-(amc_cell/2)", f"{y_center}+(amc_cell/2)"],
-                            "zrange": ["-t_cu-amc_air_gap", "-amc_air_gap"],
-                        },
-                        checksum_scope="geometry",
-                        rationale_tags=["family_geometry", "amc_cell_array"],
-                        expected_effects=[f"amc_cell_{col_idx}_{row_idx}_created"],
-                    )
 
         add_action(
             "rebuild_model",
@@ -545,10 +500,21 @@ def build_fixed_action_plan(
             "recipe_name": str(recipe.get("recipe_name", "unknown_recipe")),
             "substrate": recipe.get("substrate"),
             "notes": recipe.get("notes", []),
-            "family_parameters": {
-                **(recipe.get("family_parameters", {}) if isinstance(recipe.get("family_parameters"), dict) else {}),
-                **dict(getattr(ann, "family_parameters", {}) or {}),
+            "selected_materials": {
+                "conductor": allowed_material,
+                "substrate": allowed_substrate,
             },
+            "family_parameters": (
+                {
+                    "implementation_command": "implement_amc",
+                    "implementation_strategy": "client_heuristic",
+                }
+                if family_name == "amc_patch"
+                else {
+                    **(recipe.get("family_parameters", {}) if isinstance(recipe.get("family_parameters"), dict) else {}),
+                    **dict(getattr(ann, "family_parameters", {}) or {}),
+                }
+            ),
         },
         "actions": actions,
         "expected_exports": ["s_parameters", "summary_metrics"] + (["farfield"] if supports_farfield else []),

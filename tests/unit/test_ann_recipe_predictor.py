@@ -119,19 +119,20 @@ def test_generate_recipe_exposes_amc_and_wban_family_parameters() -> None:
     assert wban_recipe["family_parameters"]["design_frequency_ghz"] > 2.45
 
 
-def test_predictor_routes_to_amc_and_wban_family_models() -> None:
+def test_predictor_uses_recipe_only_for_amc_and_family_model_for_wban() -> None:
     predictor = AnnPredictor()
 
     amc_prediction = predictor.predict(_request("rectangular", antenna_family="amc_patch"))
     wban_prediction = predictor.predict(_request("rectangular", antenna_family="wban_patch"))
 
-    assert amc_prediction.ann_model_version == "amc_patch_formula_bootstrap_v1"
-    assert amc_prediction.family_parameters["amc_unit_cell_period_mm"] > 0.0
+    assert amc_prediction.ann_model_version == "amc_client_local_implementation"
+    assert amc_prediction.optimizer_hint == "client_implement_amc"
+    assert amc_prediction.family_parameters == {}
     assert wban_prediction.ann_model_version == "wban_patch_formula_bootstrap_v1"
     assert wban_prediction.family_parameters["ground_slot_length_mm"] > 0.0
 
 
-def test_command_package_emits_amc_geometry_and_wban_family_parameters() -> None:
+def test_command_package_emits_implement_amc_and_wban_family_parameters() -> None:
     predictor = AnnPredictor()
 
     amc_request = _request("rectangular", antenna_family="amc_patch")
@@ -139,8 +140,9 @@ def test_command_package_emits_amc_geometry_and_wban_family_parameters() -> None
     amc_package = build_command_package(amc_request, amc_prediction, session_id="sess-amc", trace_id="trace-amc")
     amc_commands = amc_package["commands"]
 
-    assert any(str(cmd["params"].get("name", "")).startswith("amc_") for cmd in amc_commands if cmd["command"] == "define_parameter")
-    assert any(str((cmd.get("params") or {}).get("name", "")).startswith("amc_cell_") for cmd in amc_commands if cmd["command"] == "define_brick")
+    assert any(cmd["command"] == "implement_amc" for cmd in amc_commands)
+    assert not any(str(cmd["params"].get("name", "")).startswith("amc_") for cmd in amc_commands if cmd["command"] == "define_parameter")
+    assert not any(str((cmd.get("params") or {}).get("name", "")).startswith("amc_cell_") for cmd in amc_commands if cmd["command"] == "define_brick")
 
     wban_request = _request(
         "rectangular",
@@ -155,7 +157,12 @@ def test_command_package_emits_amc_geometry_and_wban_family_parameters() -> None
     wban_prediction = predictor.predict(wban_request)
     wban_package = build_command_package(wban_request, wban_prediction, session_id="sess-wban", trace_id="trace-wban")
 
+    assert amc_package["design_recipe"]["selected_materials"]["conductor"] == "Copper (annealed)"
+    assert amc_package["design_recipe"]["selected_materials"]["substrate"] == "Rogers RT/duroid 5880"
+
     assert wban_package["design_recipe"]["family_parameters"]["ground_slot_length_mm"] > 0.0
+    assert wban_package["design_recipe"]["selected_materials"]["conductor"] == "Copper (annealed)"
+    assert wban_package["design_recipe"]["selected_materials"]["substrate"] == "Rogers RT/duroid 5880"
     assert any(str(cmd["params"].get("name", "")) == "body_distance_mm" for cmd in wban_package["commands"] if cmd["command"] == "define_parameter")
 
 

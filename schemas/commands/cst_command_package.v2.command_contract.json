@@ -22,6 +22,9 @@
     "set_parameter": {
       "required_params": ["name", "value"]
     },
+    "implement_amc": {
+      "required_params": ["component"]
+    },
     "rebuild_model": {},
     "create_substrate": {
       "required_params": ["name", "component", "material", "length_mm", "width_mm", "height_mm", "origin_mm"]
