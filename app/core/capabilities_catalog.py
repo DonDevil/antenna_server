@@ -22,8 +22,8 @@ def _default_capabilities() -> dict[str, Any]:
             "max": float(BOUNDS.bandwidth_mhz[1]),
         },
         "supported_families": list_supported_families(),
-        "available_conductor_materials": ["Copper (annealed)"],
-        "available_substrate_materials": ["FR-4 (lossy)", "Rogers RT/duroid 5880", "Rogers RO3003"],
+        "available_conductor_materials": ["Copper (annealed)", "Aluminum", "Silver", "Gold"],
+        "available_substrate_materials": ["FR-4 (lossy)", "Rogers RT/duroid 5880", "Rogers RO3003", "Rogers RO4350B"],
         "notes": "Default capabilities fallback.",
     }
 

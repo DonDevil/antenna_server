@@ -15,25 +15,40 @@ class FamilyProfile:
     default_substrate: str
 
 
+_COMMON_CONDUCTORS: tuple[str, ...] = (
+    "Copper (annealed)",
+    "Aluminum",
+    "Silver",
+    "Gold",
+)
+
+_COMMON_SUBSTRATES: tuple[str, ...] = (
+    "FR-4 (lossy)",
+    "Rogers RT/duroid 5880",
+    "Rogers RO3003",
+    "Rogers RO4350B",
+)
+
+
 _FAMILY_REGISTRY: dict[str, FamilyProfile] = {
     "amc_patch": FamilyProfile(
         family="amc_patch",
-        allowed_materials=("Copper (annealed)",),
-        allowed_substrates=("FR-4 (lossy)", "Rogers RT/duroid 5880"),
+        allowed_materials=_COMMON_CONDUCTORS,
+        allowed_substrates=_COMMON_SUBSTRATES,
         default_material="Copper (annealed)",
         default_substrate="FR-4 (lossy)",
     ),
     "microstrip_patch": FamilyProfile(
         family="microstrip_patch",
-        allowed_materials=("Copper (annealed)",),
-        allowed_substrates=("Rogers RT/duroid 5880", "FR-4 (lossy)"),
+        allowed_materials=_COMMON_CONDUCTORS,
+        allowed_substrates=_COMMON_SUBSTRATES,
         default_material="Copper (annealed)",
         default_substrate="Rogers RT/duroid 5880",
     ),
     "wban_patch": FamilyProfile(
         family="wban_patch",
-        allowed_materials=("Copper (annealed)",),
-        allowed_substrates=("Rogers RO3003", "Rogers RT/duroid 5880"),
+        allowed_materials=_COMMON_CONDUCTORS,
+        allowed_substrates=_COMMON_SUBSTRATES,
         default_material="Copper (annealed)",
         default_substrate="Rogers RO3003",
     ),
@@ -60,12 +75,7 @@ def apply_family_profile(request: OptimizeRequest) -> OptimizeRequest:
     profile = get_family_profile(normalized.target_spec.antenna_family)
     normalized.target_spec.antenna_family = profile.family
 
-    # If caller uses generic defaults, elevate to family defaults.
-    if normalized.design_constraints.allowed_materials == ["Copper (annealed)"]:
-        normalized.design_constraints.allowed_materials = [profile.default_material]
-    if normalized.design_constraints.allowed_substrates == ["FR-4 (lossy)"]:
-        normalized.design_constraints.allowed_substrates = [profile.default_substrate]
-
+    # Honor caller-provided materials/substrates exactly as supplied and only validate them.
     for material in normalized.design_constraints.allowed_materials:
         if material not in profile.allowed_materials:
             raise FamilyProfileConstraintError(

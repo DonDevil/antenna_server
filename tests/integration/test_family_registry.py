@@ -85,7 +85,7 @@ def _noop_validate_contract(_schema_key: str, _payload: dict[str, Any]) -> None:
     return None
 
 
-def test_supported_family_applies_profile_defaults(tmp_path: Path, monkeypatch: MonkeyPatch) -> None:
+def test_supported_family_honors_requested_materials(tmp_path: Path, monkeypatch: MonkeyPatch) -> None:
     monkeypatch.setattr("central_brain.validate_with_surrogate", _force_high_surrogate)
     client = _build_test_client(tmp_path)
 
@@ -103,7 +103,7 @@ def test_supported_family_applies_profile_defaults(tmp_path: Path, monkeypatch: 
         c for c in commands if c["command"] == "define_material" and c["params"].get("kind") == "substrate"
     ]
     assert len(substrate_defs) == 1
-    assert substrate_defs[0]["params"]["name"] == "Rogers RT/duroid 5880"
+    assert substrate_defs[0]["params"]["name"] == "FR-4 (lossy)"
 
 
 def test_unsupported_family_returns_schema_safe_error(tmp_path: Path, monkeypatch: MonkeyPatch) -> None:
@@ -133,3 +133,29 @@ def test_family_constraint_violation_returns_schema_safe_error(tmp_path: Path, m
     assert response.status_code == 422
     body = response.json()
     assert body["detail"]["error_code"] == "FAMILY_PROFILE_CONSTRAINT_FAILED"
+
+
+def test_supported_non_default_materials_are_accepted_and_echoed(tmp_path: Path, monkeypatch: MonkeyPatch) -> None:
+    monkeypatch.setattr("central_brain.validate_with_surrogate", _force_high_surrogate)
+    client = _build_test_client(tmp_path)
+
+    payload = _base_payload()
+    payload["target_spec"]["antenna_family"] = "microstrip_patch"
+    payload["design_constraints"]["allowed_materials"] = ["Silver"]
+    payload["design_constraints"]["allowed_substrates"] = ["Rogers RO4350B"]
+
+    response = client.post("/api/v1/optimize", json=payload)
+    assert response.status_code == 200
+    body = response.json()
+
+    conductor_defs = [
+        c for c in body["command_package"]["commands"] if c["command"] == "define_material" and c["params"].get("kind") == "conductor"
+    ]
+    substrate_defs = [
+        c for c in body["command_package"]["commands"] if c["command"] == "define_material" and c["params"].get("kind") == "substrate"
+    ]
+
+    assert body["command_package"]["design_recipe"]["selected_materials"]["conductor"] == "Silver"
+    assert body["command_package"]["design_recipe"]["selected_materials"]["substrate"] == "Rogers RO4350B"
+    assert conductor_defs[0]["params"]["name"] == "Silver"
+    assert substrate_defs[0]["params"]["name"] == "Rogers RO4350B"

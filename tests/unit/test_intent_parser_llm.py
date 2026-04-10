@@ -148,6 +148,17 @@ def test_intent_parser_handles_spoken_units_and_wearable_aliases() -> None:
     assert result["parsed_conductor_material"] == "Copper (annealed)"
 
 
+def test_intent_parser_extracts_alternative_materials_from_text() -> None:
+    with patch("app.llm.intent_parser.PLANNER_SETTINGS") as mock_settings:
+        mock_settings.llm_enabled_for_intent = False
+        result = summarize_user_intent(
+            "Design a microstrip antenna at 5.8 GHz with 120 MHz bandwidth using Rogers RO4350B and silver."
+        )
+
+    assert result["parsed_substrate_material"] == "Rogers RO4350B"
+    assert result["parsed_conductor_material"] == "Silver"
+
+
 def test_intent_parser_normalizes_llm_family_and_shape_aliases() -> None:
     llm_response = {
         "frequency_ghz": 5.8,

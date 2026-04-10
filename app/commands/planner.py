@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any, cast
 
+from app.antenna.materials import get_conductor_properties, get_substrate_properties
 from app.antenna.recipes import generate_recipe
 from app.core.json_contracts import validate_contract
 from app.core.schemas import AnnPrediction, OptimizeRequest
@@ -122,6 +123,8 @@ def build_fixed_action_plan(
     target_bandwidth = float(req_any.target_spec.bandwidth_mhz)
     allowed_material = str(req_any.design_constraints.allowed_materials[0])
     allowed_substrate = str(req_any.design_constraints.allowed_substrates[0])
+    conductor = get_conductor_properties(allowed_material)
+    substrate = get_substrate_properties(allowed_substrate)
     export_format = str(req_any.client_capabilities.export_formats[0])
     max_sim_timeout = int(req_any.client_capabilities.max_simulation_timeout_sec)
     supports_farfield = bool(req_any.client_capabilities.supports_farfield_export)
@@ -207,7 +210,11 @@ def build_fixed_action_plan(
         add_action(
             "define_material",
             "define_material",
-            {"name": allowed_material, "kind": "conductor", "conductivity_s_per_m": 5.8e7},
+            {
+                "name": str(conductor["name"]),
+                "kind": "conductor",
+                "conductivity_s_per_m": float(conductor["conductivity_s_per_m"]),
+            },
             checksum_scope="geometry",
             rationale_tags=["family_constraints"],
             expected_effects=["conductor_material_defined"],
@@ -215,7 +222,12 @@ def build_fixed_action_plan(
         add_action(
             "define_material",
             "define_material",
-            {"name": allowed_substrate, "kind": "substrate", "epsilon_r": 4.4, "loss_tangent": 0.02},
+            {
+                "name": str(substrate["name"]),
+                "kind": "substrate",
+                "epsilon_r": float(substrate["epsilon_r"]),
+                "loss_tangent": float(substrate["loss_tangent"]),
+            },
             checksum_scope="geometry",
             rationale_tags=["family_constraints"],
             expected_effects=["substrate_material_defined"],

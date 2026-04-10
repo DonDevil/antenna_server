@@ -24,9 +24,13 @@ _SUBSTRATE_ALIASES: AliasMap = {
     "FR-4 (lossy)": ("fr-4", "fr4", "fr 4"),
     "Rogers RT/duroid 5880": ("rogers rt/duroid 5880", "rogers 5880", "duroid 5880", "rt duroid 5880"),
     "Rogers RO3003": ("rogers ro3003", "ro3003", "ro 3003"),
+    "Rogers RO4350B": ("rogers ro4350b", "ro4350b", "ro 4350b"),
 }
 _CONDUCTOR_ALIASES: AliasMap = {
     "Copper (annealed)": ("copper", "annealed copper"),
+    "Aluminum": ("aluminum", "aluminium"),
+    "Silver": ("silver",),
+    "Gold": ("gold",),
 }
 _FAMILY_VALUE_ALIASES: AliasMap = {
     "amc_patch": ("amc_patch", "amc patch", "amc", "artificial magnetic conductor"),
