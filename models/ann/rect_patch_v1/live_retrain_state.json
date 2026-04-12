@@ -1,0 +1,30 @@
+{
+  "families": {
+    "microstrip_patch": {
+      "last_trained_valid_rows": 100,
+      "last_retrained_at": "2026-04-12T04:52:19.397403+00:00",
+      "last_error": null,
+      "last_reload_ok": true,
+      "retraining_in_progress": false
+    },
+    "amc_patch": {
+      "last_trained_valid_rows": 0,
+      "last_retrained_at": null,
+      "last_error": null,
+      "last_reload_ok": null,
+      "retraining_in_progress": false
+    },
+    "wban_patch": {
+      "last_trained_valid_rows": 0,
+      "last_retrained_at": null,
+      "last_error": null,
+      "last_reload_ok": null,
+      "retraining_in_progress": false
+    }
+  },
+  "last_trained_valid_rows": 100,
+  "last_retrained_at": "2026-04-12T04:52:19.397403+00:00",
+  "last_error": null,
+  "last_reload_ok": true,
+  "retraining_in_progress": false
+}
